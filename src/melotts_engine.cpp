@@ -408,11 +408,19 @@ std::string ExpandNumbersBasic(const std::string& text) {
 
 std::string NormalizeEnglishText(std::string text) {
   text = ToLowerAscii(text);
-  ReplaceAll(text, "melotts", "melo tts");
-  ReplaceAll(text, "c++", "c plus plus");
-  ReplaceAll(text, "cpp", "c plus plus");
-  ReplaceAll(text, "c#", "c sharp");
-  ReplaceAll(text, "f#", "f sharp");
+  ReplaceAll(text, "melotts", "melo tee tee ess");
+  ReplaceAll(text, "tts", "tee tee ess");
+  ReplaceAll(text, "asr", "ay ess ar");
+  ReplaceAll(text, "nlp", "en el pee");
+  ReplaceAll(text, "cli", "see el eye");
+  ReplaceAll(text, "api", "ay pee eye");
+  ReplaceAll(text, "json", "jay son");
+  ReplaceAll(text, "html", "aych tee em el");
+  ReplaceAll(text, "sql", "ess cue el");
+  ReplaceAll(text, "c++", "see plus plus");
+  ReplaceAll(text, "cpp", "see plus plus");
+  ReplaceAll(text, "c#", "see sharp");
+  ReplaceAll(text, "f#", "eff sharp");
   ReplaceAll(text, "mrs.", "misess");
   ReplaceAll(text, "mr.", "mister");
   ReplaceAll(text, "dr.", "doctor");
@@ -517,6 +525,51 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   }
   if (normalized == "html") {
     return {{"ey", 0}, {"ch", 0}, {"t", 0}, {"iy", 0}, {"eh", 0}, {"m", 0}, {"eh", 0}, {"l", 0}};
+  }
+  if (normalized == "tee") {
+    return {{"t", 0}, {"iy", 0}};
+  }
+  if (normalized == "ess") {
+    return {{"eh", 0}, {"s", 0}};
+  }
+  if (normalized == "see") {
+    return {{"s", 0}, {"iy", 0}};
+  }
+  if (normalized == "ay") {
+    return {{"ay", 0}};
+  }
+  if (normalized == "eff") {
+    return {{"eh", 0}, {"f", 0}};
+  }
+  if (normalized == "ar") {
+    return {{"aa", 0}, {"r", 0}};
+  }
+  if (normalized == "en") {
+    return {{"eh", 0}, {"n", 0}};
+  }
+  if (normalized == "el") {
+    return {{"eh", 0}, {"l", 0}};
+  }
+  if (normalized == "pee") {
+    return {{"p", 0}, {"iy", 0}};
+  }
+  if (normalized == "cue") {
+    return {{"k", 0}, {"y", 0}, {"uw", 0}};
+  }
+  if (normalized == "eye") {
+    return {{"ay", 0}};
+  }
+  if (normalized == "jay") {
+    return {{"jh", 0}, {"ey", 0}};
+  }
+  if (normalized == "son") {
+    return {{"s", 0}, {"ah", 0}, {"n", 0}};
+  }
+  if (normalized == "aych") {
+    return {{"ey", 0}, {"ch", 0}};
+  }
+  if (normalized == "em") {
+    return {{"eh", 0}, {"m", 0}};
   }
   if (normalized == "plus") {
     return {{"p", 0}, {"l", 0}, {"ah", 0}, {"s", 0}};
