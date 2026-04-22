@@ -200,6 +200,8 @@ Ensures `third_party/onnxruntime-win-x64-1.20.1` exists. If missing, it is downl
 `make all`
 Runs `make deps`, checks whether required files under `models/` already exist, incrementally restores any missing artifacts, and then builds the C++ targets.
 
+This is the recommended local developer workflow when you want both repository dependencies and model artifacts to be restored automatically.
+
 `make model`
 Runs `make deps` and incrementally restores missing ONNX model artifacts under `models/`.
 
@@ -258,6 +260,7 @@ Notes:
 - Build, output, and cleanup behavior are repository-local
 - `tools/export_english_onnx.py` is included in this repository
 - Minimal Python export dependencies are vendored under `tools/melotts_py/`
+- `requirements.txt` pins `transformers` below `4.53` to keep the current ONNX export path compatible
 - See `THIRD_PARTY.md` for vendored component and dependency notes
 
 ## Notes
