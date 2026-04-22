@@ -1,96 +1,72 @@
 # MeloTTS.C
 
-这个仓库提供一个纯 C++17 的 English-only 语音合成接口，运行时使用 `ONNX Runtime` 加载：
+![Language](https://img.shields.io/badge/language-C%2B%2B17-blue)
+![Runtime](https://img.shields.io/badge/runtime-ONNX%20Runtime-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)
+![Status](https://img.shields.io/badge/status-English--only-orange)
+
+MeloTTS.C is a standalone C++17 English-only text-to-speech runtime built around ONNX Runtime.
+
+It includes:
 
 - 英文 `BERT` ONNX 模型
 - 导出的 `MeloTTS English infer` ONNX 模型
 
-它不依赖 Python 桥接脚本。
+It does not depend on a Python bridge at runtime.
 
-## 包含内容
+## Highlights
+
+- Standalone C++ runtime for English MeloTTS inference
+- ONNX-based deployment path for both BERT and acoustic inference
+- Streaming-style chunked synthesis demo
+- Local ONNX export tooling bundled in the repository
+- Incremental `make` targets for dependencies, models, build, and cleanup
+- Windows GitHub Actions build validation
+
+## Repository Layout
 
 - `include/melotts_engine.h`
-  C++ 接口库头文件，提供 `TTSEngine` 和 `WriteWaveFile`
+  Public C++ API exposing `TTSEngine` and `WriteWaveFile`
 - `demo/melotts_cli.cpp`
-  命令行演示程序
+  Basic command-line synthesis demo
+- `demo/melotts_stream_cli.cpp`
+  Chunked streaming demo with per-chunk metrics
 - `config/english_onnx.example.ini`
-  模型与输入输出名配置示例
+  Example runtime configuration
+- `tools/export_english_onnx.py`
+  Local ONNX export entry point
 
 ## Scope
 
-- 仅支持 English-only
-- 文本前端为纯 C++ 实现
-- 优先使用 `CMU dict` 发音
-- 未登录词使用简单字母到音素回退规则
-- BERT 侧使用纯 C++ `WordPiece` tokenizer
+- English-only
+- Pure C++ text front-end
+- CMU dictionary pronunciation when available
+- Built-in fallback pronunciation rules for unknown words
+- Pure C++ WordPiece tokenizer for BERT input preparation
 
-这个仓库提供一个可运行的纯 C++ English-only 方案，但英文前处理与原始 Python `g2p_en` 不会逐 token 完全一致。
+The repository provides a practical standalone English C++ pipeline, but its text preprocessing is not intended to be token-for-token identical to the original Python `g2p_en` stack.
 
-## 需要准备的模型
+## Quick Start
 
-你可以自己准备这些文件，也可以直接用仓库内的导出脚本生成：
-
-```powershell
-python tools/export_english_onnx.py --output-dir models
-```
-
-生成结果：
-
-1. `bert_base_uncased.onnx`
-要求输出一个张量，形状为 `[1, token_count, 768]`
-2. `bert-base-uncased-vocab.txt`
-标准 BERT 词表
-3. `melotts_en_infer.onnx`
-要求等价于 `SynthesizerTrn.infer(...)` 的 English 导出图
-4. 可选的 `cmudict.rep`
-如果提供，会优先使用 CMU 字典发音；如果不提供，则自动回退到内置英文规则发音
-
-如果你已经有本地英文 checkpoint，也可以这样导出：
-
-```powershell
-python tools/export_english_onnx.py --ckpt-path path/to/checkpoint.pth --config-path path/to/config.json
-```
-
-如果你的 ONNX 输入名或输出名不同，修改 `config/english_onnx.example.ini` 即可。
-
-## 构建
-
-```powershell
-cmake -S . -B build -DONNXRUNTIME_ROOT="path/to/onnxruntime-win-x64-1.20.1"
-cmake --build build --config Release
-```
-
-## Python Export Dependencies
-
-如果你需要在当前仓库内导出 ONNX，请先安装：
+### 1. Install Python export dependencies
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-如果你把 ONNX Runtime 放在仓库内，推荐路径是：
-
-```text
-third_party/onnxruntime-win-x64-1.20.1
-```
-
-所以你在这个仓库里可以直接运行：
+### 2. Build everything with automatic dependency and model recovery
 
 ```powershell
-cmake -S . -B build -DONNXRUNTIME_ROOT="third_party/onnxruntime-win-x64-1.20.1"
-cmake --build build --config Release
+make all
 ```
 
-Windows 运行时请确保把 `onnxruntime.dll` 复制到可执行文件目录，或者把以下目录加入 `PATH`：
+This target will:
 
-```text
-third_party/onnxruntime-win-x64-1.20.1/lib
-```
+- ensure `third_party/onnxruntime-win-x64-1.20.1` exists
+- ensure required files under `models/` exist
+- configure and build the C++ targets
 
-当前仓库的 `CMake` 构建会在生成 demo 可执行文件后，自动把匹配版本的 `onnxruntime.dll` 和 `onnxruntime_providers_shared.dll` 复制到 `build/Release/`。
-这样可以避免程序误加载系统里较旧版本的 ONNX Runtime DLL。
-
-## 运行
+### 3. Run the basic demo
 
 ```powershell
 ./build/Release/melotts_cli.exe \
@@ -99,7 +75,7 @@ third_party/onnxruntime-win-x64-1.20.1/lib
   --output outputs/english_cpp_demo.wav
 ```
 
-句级流式 demo：
+### 4. Run the streaming demo
 
 ```powershell
 ./build/Release/melotts_stream_cli.exe \
@@ -109,7 +85,62 @@ third_party/onnxruntime-win-x64-1.20.1/lib
   --chunk-dir outputs/stream_chunks
 ```
 
-## 接口示例
+## Models
+
+You can prepare the required model files yourself or generate them locally with:
+
+```powershell
+python tools/export_english_onnx.py --output-dir models
+```
+
+Expected outputs:
+
+1. `bert_base_uncased.onnx`
+Expected to output a tensor of shape `[1, token_count, 768]`
+2. `bert-base-uncased-vocab.txt`
+Standard BERT vocabulary
+3. `melotts_en_infer.onnx`
+Expected to be equivalent to the English `SynthesizerTrn.infer(...)` graph
+4. 可选的 `cmudict.rep`
+If provided, CMU dictionary pronunciation is preferred. Otherwise the runtime falls back to built-in English pronunciation rules.
+
+If you already have a local English checkpoint, you can also export with:
+
+```powershell
+python tools/export_english_onnx.py --ckpt-path path/to/checkpoint.pth --config-path path/to/config.json
+```
+
+If your exported ONNX graph uses different input or output names, update `config/english_onnx.example.ini`.
+
+## Build
+
+```powershell
+cmake -S . -B build -DONNXRUNTIME_ROOT="path/to/onnxruntime-win-x64-1.20.1"
+cmake --build build --config Release
+```
+
+If ONNX Runtime is stored inside the repository, the recommended path is:
+
+```text
+third_party/onnxruntime-win-x64-1.20.1
+```
+
+So a repository-local build can be done with:
+
+```powershell
+cmake -S . -B build -DONNXRUNTIME_ROOT="third_party/onnxruntime-win-x64-1.20.1"
+cmake --build build --config Release
+```
+
+Windows runtime note:
+
+```text
+third_party/onnxruntime-win-x64-1.20.1/lib
+```
+
+The CMake build copies the matching `onnxruntime.dll` and `onnxruntime_providers_shared.dll` into `build/Release/` automatically, which avoids loading an older system-wide ONNX Runtime DLL by mistake.
+
+## API Example
 
 ```cpp
 #include "melotts_engine.h"
@@ -126,7 +157,7 @@ int main() {
 }
 ```
 
-回调式流式接口示例：
+Streaming callback example:
 
 ```cpp
 #include "melotts_engine.h"
@@ -152,7 +183,7 @@ int main() {
 
 ## Make Targets
 
-仓库根目录提供了一个 `Makefile`，内部仍然调用 `cmake`。
+The repository root includes a `Makefile` that wraps the most common local workflows.
 
 ```makefile
 make all
@@ -163,68 +194,82 @@ make distclean
 make purge
 ```
 
-`make deps` 会确保 `third_party/onnxruntime-win-x64-1.20.1` 存在；如果缺失，会自动下载并解压。
-`make all` 会先执行 `make deps`，并检查 `models/` 下是否已经存在必需的模型文件；如果缺失，只会补生成缺失的部分，然后完成构建。
-`make model` 会先执行 `make deps`，然后检查并补生成 `models/` 目录下缺失的 ONNX 模型和 BERT 词表。
-`make clean` 会递归删除所有本仓库内的临时文件和生成物，包括整个 `build` 目录、`outputs`、Python 缓存目录以及根目录级 CMake 临时文件。
-`make distclean` 会在 `make clean` 的基础上额外删除 `third_party/onnxruntime-win-x64-1.20.1`。
-`make purge` 会在 `make distclean` 的基础上额外删除 `models/`。
+`make deps`
+Ensures `third_party/onnxruntime-win-x64-1.20.1` exists. If missing, it is downloaded and extracted automatically.
 
-当前库目标名为 `melotts_engine`。
+`make all`
+Runs `make deps`, checks whether required files under `models/` already exist, incrementally restores any missing artifacts, and then builds the C++ targets.
+
+`make model`
+Runs `make deps` and incrementally restores missing ONNX model artifacts under `models/`.
+
+`make clean`
+Removes generated files and caches inside the repository, including `build/`, `outputs/`, Python cache directories, and root-level CMake temporary files.
+
+`make distclean`
+Runs `make clean` and additionally removes `third_party/onnxruntime-win-x64-1.20.1`.
+
+`make purge`
+Runs `make distclean` and additionally removes `models/`.
+
+Current C++ library target name: `melotts_engine`
 
 ## Clean
 
-如果你希望在仓库内部实现类似 `make clean` 的行为，可以直接使用 `CMake`：
+If you prefer to use CMake directly instead of the repository `Makefile`, the equivalent cleanup behavior is:
 
-1. 清理构建产物
+1. Remove compiled build products
 
 ```powershell
 cmake --build build --target clean --config Release
 ```
 
-2. 清理运行产生的音频输出
+2. Remove generated runtime audio outputs
 
 ```powershell
 cmake --build build --target distclean --config Release
 ```
 
-说明：
-- `clean` 由底层生成器提供，用于删除编译产物
-- `distclean` 是 `CMakeLists.txt` 里自定义的目标，用于删除 `outputs`
-- 如果你想完全回到未构建状态，可以直接删除 `build`
-- 如果你使用 `make clean`，它会一并清掉仓库根目录里常见的 CMake 临时文件
-- `make clean` 比 `cmake --build build --target clean` 更彻底，因为它会直接删除整个 `build` 目录
-- 如果你需要删除仓库内下载的 ONNX Runtime 目录，请使用 `make distclean`
-- 如果你还需要删除导出的 `models/` 目录，请使用 `make purge`
-- 在执行过 `make distclean` 或 `make purge` 后，下一次 `make all` 或 `make model` 都会自动重新下载 ONNX Runtime
-- 在执行过 `make purge` 后，下一次 `make all` 也会自动重新生成 `models/` 目录中的必需文件
-- 模型检查是增量的：如果只缺少 BERT 文件或只缺少 acoustic 文件，只会重导出缺失的那一部分
+Notes:
+- `clean` is provided by the underlying CMake generator and removes compiled artifacts
+- `distclean` is a custom CMake target defined in `CMakeLists.txt` and removes `outputs`
+- removing `build/` is the simplest way to return to an unbuilt state
+- `make clean` is more aggressive than `cmake --build build --target clean` because it removes the entire `build/` tree
+- after `make distclean` or `make purge`, the next `make all` or `make model` will automatically restore ONNX Runtime
+- model restoration is incremental: if only BERT files or only the acoustic model is missing, only the missing part is exported
 
-## 关键实现说明
+## Technical Notes
 
-- English 推理时，`ja_bert` 输入承载 `768` 维英文 BERT 特征
-- `bert` 输入填充为全零，形状为 `[1, 1024, T]`
-- `phone/tone/language` 会按照 MeloTTS 的 `add_blank` 规则插空
-- 默认 `english_language_id=2`，`english_tone_start=7`
-- symbol 表已内置在 C++ 运行时中，不依赖外部 `symbols.py`
-- `cmudict_path` 是可选项，缺失时会回退到内置英文字母发音规则
-- `StreamSynthesize(...)` 提供库级回调式流式输出
-- 流式分块策略为：句边界优先，其次词边界，最后才按 `max_chars` 强制切分
-- 每个 `StreamingChunk` 会返回统计字段：`first_chunk_latency_ms`、`synth_ms`、`audio_ms`、`rtf`
-- `melotts_stream_cli` 还会输出汇总指标：`chunks`、`samples`、`total_synth_ms`、`total_audio_ms`、`avg_rtf`
+- During English inference, `ja_bert` carries the 768-channel English BERT features
+- `bert` is filled with zeros and uses shape `[1, 1024, T]`
+- `phone`, `tone`, and `language` follow the MeloTTS `add_blank` convention
+- Default values are `english_language_id=2` and `english_tone_start=7`
+- The symbol table is embedded directly into the C++ runtime and does not require an external `symbols.py`
+- `cmudict_path` is optional and falls back to built-in pronunciation rules when missing
+- `StreamSynthesize(...)` provides library-level callback-based streaming output
+- Chunk splitting is sentence-first, then word-boundary-first, and only hard-splits when necessary
+- Each `StreamingChunk` carries `first_chunk_latency_ms`, `synth_ms`, `audio_ms`, and `rtf`
+- `melotts_stream_cli` also prints summary metrics such as `chunks`, `samples`, `total_synth_ms`, `total_audio_ms`, and `avg_rtf`
 
 ## Repository Notes
 
-- 运行时不依赖外部 `symbols.py`
-- `cmudict_path` 可选
-- 构建、输出、清理都只作用在当前仓库目录内
-- `tools/export_english_onnx.py` 已迁入本仓库
-- 导出脚本依赖的最小 Python 模块已 vendored 到 `tools/melotts_py/`
-- 第三方依赖与来源说明见 `THIRD_PARTY.md`
+- Runtime inference does not depend on an external `symbols.py`
+- `cmudict_path` is optional
+- Build, output, and cleanup behavior are repository-local
+- `tools/export_english_onnx.py` is included in this repository
+- Minimal Python export dependencies are vendored under `tools/melotts_py/`
+- See `THIRD_PARTY.md` for vendored component and dependency notes
 
 ## Notes
 
-- 仓库默认不附带模型权重
-- 如果你的 acoustic ONNX 导出图不是直接输出音频，接口需要按实际图结构调整
-- 流式 demo 是句级/分块流式，不是声码器逐帧低延迟流式
-- 每个 chunk 仍然独立完成一次完整推理，chunk 之间会插入 50ms 静音，便于拼接播放
+- The repository does not ship pretrained model weights by default
+- If your acoustic ONNX export does not directly output waveform audio, the runtime interface may need adjustment
+- The streaming demo is chunked sentence-style streaming, not frame-level low-latency vocoder streaming
+- Each chunk is still synthesized independently, with 50 ms of silence inserted between non-final chunks for easier concatenation
+
+## Roadmap
+
+- Add CI builds for the standalone repository
+- Add an HTTP or WebSocket streaming service demo
+- Improve English text normalization and fallback pronunciation quality
+- Add packaging guidance for redistributable releases
