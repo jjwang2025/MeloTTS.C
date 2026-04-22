@@ -443,6 +443,77 @@ std::string SplitCamelAndAcronymBoundaries(const std::string& text) {
   return result;
 }
 
+std::vector<std::string> SplitMixedCaseToken(const std::string& token) {
+  std::vector<std::string> parts;
+  std::string current;
+  current.reserve(token.size());
+
+  auto is_upper = [](char ch) {
+    return std::isupper(static_cast<unsigned char>(ch)) != 0;
+  };
+  auto is_lower = [](char ch) {
+    return std::islower(static_cast<unsigned char>(ch)) != 0;
+  };
+  auto is_alpha = [](char ch) {
+    return std::isalpha(static_cast<unsigned char>(ch)) != 0;
+  };
+
+  for (size_t i = 0; i < token.size(); ++i) {
+    const char current_char = token[i];
+    if (i > 0) {
+      const char previous = token[i - 1];
+      const char next = (i + 1 < token.size()) ? token[i + 1] : '\0';
+
+      const bool lower_to_upper = is_lower(previous) && is_upper(current_char);
+      const bool acronym_to_word = is_upper(previous) && is_upper(current_char) && next != '\0' && is_lower(next);
+      const bool digit_to_alpha = std::isdigit(static_cast<unsigned char>(previous)) && is_alpha(current_char);
+      const bool alpha_to_digit = is_alpha(previous) && std::isdigit(static_cast<unsigned char>(current_char));
+
+      if (lower_to_upper || acronym_to_word || digit_to_alpha || alpha_to_digit) {
+        if (!current.empty()) {
+          parts.push_back(current);
+          current.clear();
+        }
+      }
+    }
+
+    current.push_back(current_char);
+  }
+
+  if (!current.empty()) {
+    parts.push_back(current);
+  }
+
+  return parts;
+}
+
+bool HasMixedCase(const std::string& token) {
+  bool has_upper = false;
+  bool has_lower = false;
+  for (char ch : token) {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    if (std::isupper(uch)) {
+      has_upper = true;
+    } else if (std::islower(uch)) {
+      has_lower = true;
+    }
+  }
+  return has_upper && has_lower;
+}
+
+bool IsUppercaseAlphaWord(const std::string& token) {
+  if (token.size() < 2) {
+    return false;
+  }
+  for (char ch : token) {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    if (!std::isalpha(uch) || !std::isupper(uch)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::string NormalizeEnglishText(std::string text) {
   text = SplitCamelAndAcronymBoundaries(text);
   text = ToLowerAscii(text);
@@ -546,6 +617,29 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   }
 
   const auto normalized = ToLowerAscii(token);
+  static const std::unordered_map<std::string, std::vector<std::pair<std::string, int>>> builtin_words = {
+      {"a", {{"ah", 0}}},
+      {"an", {{"ae", 0}, {"n", 0}}},
+      {"are", {{"aa", 0}, {"r", 0}}},
+      {"do", {{"d", 0}, {"uw", 0}}},
+      {"does", {{"d", 0}, {"ah", 0}, {"z", 0}}},
+      {"done", {{"d", 0}, {"ah", 0}, {"n", 0}}},
+      {"from", {{"f", 0}, {"r", 0}, {"ah", 0}, {"m", 0}}},
+      {"of", {{"ah", 0}, {"v", 0}}},
+      {"one", {{"w", 0}, {"ah", 0}, {"n", 0}}},
+      {"once", {{"w", 0}, {"ah", 0}, {"n", 0}, {"s", 0}}},
+      {"the", {{"dh", 0}, {"ah", 0}}},
+      {"to", {{"t", 0}, {"uw", 0}}},
+      {"too", {{"t", 0}, {"uw", 0}}},
+      {"two", {{"t", 0}, {"uw", 0}}},
+      {"was", {{"w", 0}, {"aa", 0}, {"z", 0}}},
+      {"were", {{"w", 0}, {"er", 0}}},
+      {"you", {{"y", 0}, {"uw", 0}}},
+      {"your", {{"y", 0}, {"ao", 0}, {"r", 0}}}};
+  if (const auto it = builtin_words.find(normalized); it != builtin_words.end()) {
+    return it->second;
+  }
+
   if (normalized == "api") {
     return {{"ey", 0}, {"p", 0}, {"iy", 0}, {"ay", 0}};
   }
@@ -719,6 +813,34 @@ std::vector<std::pair<std::string, int>> FallbackPhones(const std::string& word)
   return result;
 }
 
+std::vector<std::string> SplitAcronymSuffixTokens(const std::string& token) {
+  if (!HasMixedCase(token)) {
+    return {token};
+  }
+
+  const auto parts = SplitMixedCaseToken(token);
+  if (parts.size() < 2) {
+    return {token};
+  }
+
+  std::vector<std::string> result;
+  result.reserve(parts.size());
+  for (size_t i = 0; i < parts.size(); ++i) {
+    if (i + 1 == parts.size() && IsUppercaseAlphaWord(parts[i])) {
+      for (size_t j = 0; j < parts[i].size(); ++j) {
+        result.emplace_back(1, parts[i][j]);
+      }
+    } else {
+      result.push_back(parts[i]);
+    }
+  }
+  return result;
+}
+
+bool IsSingleLetterToken(const std::string& token) {
+  return token.size() == 1 && std::isalpha(static_cast<unsigned char>(token.front()));
+}
+
 template <typename T>
 std::vector<T> Intersperse(const std::vector<T>& values, const T& blank) {
   std::vector<T> result(values.size() * 2 + 1, blank);
@@ -779,33 +901,46 @@ TextFeatures BuildTextFeatures(const std::string& raw_text,
   tones.push_back(0);
 
   for (const auto& token : basic_tokens) {
-    if (token.empty()) {
-      continue;
+    const auto expanded_tokens = SplitAcronymSuffixTokens(token);
+    for (size_t expanded_index = 0; expanded_index < expanded_tokens.size(); ++expanded_index) {
+      const auto& expanded_token = expanded_tokens[expanded_index];
+      if (expanded_token.empty()) {
+        continue;
+      }
+
+      const auto pieces = tokenizer.TokenizeWord(expanded_token);
+      bert_pieces.insert(bert_pieces.end(), pieces.begin(), pieces.end());
+
+      std::vector<std::pair<std::string, int>> token_phones;
+      if (const auto special_phones = LookupSpecialTokenPhones(expanded_token); !special_phones.empty()) {
+        token_phones = special_phones;
+      } else if (const auto* g2p_entry = g2p_lexicon.Lookup(expanded_token)) {
+        token_phones = *g2p_entry;
+      } else if (IsPunctuationToken(expanded_token)) {
+        token_phones.emplace_back(MapPunctuationPhone(expanded_token), 0);
+      } else if (const auto* cmudict_entry = cmudict.Lookup(expanded_token)) {
+        token_phones = *cmudict_entry;
+      } else {
+        token_phones = FallbackPhones(expanded_token);
+      }
+
+      for (const auto& [phone, tone] : token_phones) {
+        phones.push_back(phone);
+        tones.push_back(tone);
+      }
+
+      const bool is_split_letter = IsSingleLetterToken(expanded_token);
+      const bool next_is_split_letter = expanded_index + 1 < expanded_tokens.size() &&
+                                        IsSingleLetterToken(expanded_tokens[expanded_index + 1]);
+      if (is_split_letter && next_is_split_letter) {
+        phones.push_back("SP");
+        tones.push_back(0);
+      }
+
+      const auto counts =
+          DistributePhoneCounts(static_cast<int>(token_phones.size()), static_cast<int>(pieces.size()));
+      word2ph.insert(word2ph.end(), counts.begin(), counts.end());
     }
-
-    const auto pieces = tokenizer.TokenizeWord(token);
-    bert_pieces.insert(bert_pieces.end(), pieces.begin(), pieces.end());
-
-    std::vector<std::pair<std::string, int>> token_phones;
-    if (const auto special_phones = LookupSpecialTokenPhones(token); !special_phones.empty()) {
-      token_phones = special_phones;
-    } else if (const auto* g2p_entry = g2p_lexicon.Lookup(token)) {
-      token_phones = *g2p_entry;
-    } else if (IsPunctuationToken(token)) {
-      token_phones.emplace_back(MapPunctuationPhone(token), 0);
-    } else if (const auto* cmudict_entry = cmudict.Lookup(token)) {
-      token_phones = *cmudict_entry;
-    } else {
-      token_phones = FallbackPhones(token);
-    }
-
-    for (const auto& [phone, tone] : token_phones) {
-      phones.push_back(phone);
-      tones.push_back(tone);
-    }
-
-    const auto counts = DistributePhoneCounts(static_cast<int>(token_phones.size()), static_cast<int>(pieces.size()));
-    word2ph.insert(word2ph.end(), counts.begin(), counts.end());
   }
 
   phones.push_back(kPadSymbol);
