@@ -4,6 +4,7 @@
 ![Runtime](https://img.shields.io/badge/runtime-ONNX%20Runtime-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)
 ![Status](https://img.shields.io/badge/status-English--only-orange)
+![Build](https://github.com/jjwang2025/MeloTTS.C/actions/workflows/windows-build.yml/badge.svg)
 
 MeloTTS.C is a standalone C++17 English-only text-to-speech runtime built around ONNX Runtime.
 
