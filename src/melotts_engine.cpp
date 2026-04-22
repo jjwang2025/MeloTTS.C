@@ -514,8 +514,57 @@ bool IsUppercaseAlphaWord(const std::string& token) {
   return true;
 }
 
+bool IsLowercaseAlphaWord(const std::string& token) {
+  if (token.empty()) {
+    return false;
+  }
+  for (char ch : token) {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    if (!std::isalpha(uch) || !std::islower(uch)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
+  std::string result;
+  result.reserve(text.size() * 2);
+
+  for (size_t i = 0; i < text.size();) {
+    const unsigned char ch = static_cast<unsigned char>(text[i]);
+    if (!std::isalpha(ch)) {
+      result.push_back(text[i]);
+      ++i;
+      continue;
+    }
+
+    size_t j = i;
+    while (j < text.size() && std::isalpha(static_cast<unsigned char>(text[j]))) {
+      ++j;
+    }
+
+    const std::string token = text.substr(i, j - i);
+    if (IsUppercaseAlphaWord(token)) {
+      for (size_t k = 0; k < token.size(); ++k) {
+        if (k > 0) {
+          result.push_back(' ');
+        }
+        result.push_back(token[k]);
+      }
+    } else {
+      result.append(token);
+    }
+
+    i = j;
+  }
+
+  return result;
+}
+
 std::string NormalizeEnglishText(std::string text) {
   text = SplitCamelAndAcronymBoundaries(text);
+  text = ExpandUppercaseAcronymsToLetters(text);
   text = ToLowerAscii(text);
   ReplaceAll(text, "c++", "see plus plus");
   ReplaceAll(text, "cpp", "see plus plus");
@@ -616,6 +665,15 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
     return letter_name;
   }
 
+  if (IsUppercaseAlphaWord(token)) {
+    std::vector<std::pair<std::string, int>> phones;
+    for (char ch : token) {
+      const auto letter_name = LookupLetterNamePhones(std::string(1, ch));
+      phones.insert(phones.end(), letter_name.begin(), letter_name.end());
+    }
+    return phones;
+  }
+
   const auto normalized = ToLowerAscii(token);
   static const std::unordered_map<std::string, std::vector<std::pair<std::string, int>>> builtin_words = {
       {"a", {{"ah", 0}}},
@@ -642,6 +700,9 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
 
   if (normalized == "api") {
     return {{"ey", 0}, {"p", 0}, {"iy", 0}, {"ay", 0}};
+  }
+  if (normalized == "chat") {
+    return {{"ch", 0}, {"ae", 0}, {"t", 0}};
   }
   if (normalized == "sql") {
     return {{"eh", 0}, {"s", 0}, {"k", 0}, {"y", 0}, {"uw", 0}, {"eh", 0}, {"l", 0}};
@@ -682,6 +743,49 @@ std::pair<std::string, int> RefineArpaPhone(const std::string& phone) {
   return {ToLowerAscii(phone), 0};
 }
 
+std::vector<std::pair<std::string, int>> ParseDictionaryPhones(const std::string& text) {
+  std::vector<std::pair<std::string, int>> phones;
+  std::stringstream stream(text);
+  std::string item;
+  while (stream >> item) {
+    if (item == "-" || item.empty()) {
+      continue;
+    }
+    phones.push_back(RefineArpaPhone(item));
+  }
+  return phones;
+}
+
+std::vector<std::pair<std::string, int>> ParseCachedDictionaryPhones(const std::string& text) {
+  std::vector<std::pair<std::string, int>> phones;
+  size_t pos = 0;
+  while (pos < text.size()) {
+    const size_t quote_begin = text.find('\'', pos);
+    if (quote_begin == std::string::npos) {
+      break;
+    }
+    const size_t quote_end = text.find('\'', quote_begin + 1);
+    if (quote_end == std::string::npos) {
+      break;
+    }
+
+    const auto token = text.substr(quote_begin + 1, quote_end - quote_begin - 1);
+    if (!token.empty()) {
+      phones.push_back(RefineArpaPhone(token));
+    }
+    pos = quote_end + 1;
+  }
+  return phones;
+}
+
+std::string NormalizeDictionaryKey(std::string word) {
+  const auto pronunciation_suffix = word.find('(');
+  if (pronunciation_suffix != std::string::npos) {
+    word = word.substr(0, pronunciation_suffix);
+  }
+  return ToUpperAscii(Trim(word));
+}
+
 class CmuDictionary {
  public:
   explicit CmuDictionary(const std::string& path) {
@@ -694,35 +798,42 @@ class CmuDictionary {
     }
 
     std::string line;
-    int line_index = 0;
     while (std::getline(input, line)) {
-      ++line_index;
-      if (line_index < 49) {
-        continue;
-      }
-      const auto divider = line.find("  ");
-      if (divider == std::string::npos) {
+      line = Trim(line);
+      if (line.empty() || line.rfind(";;;", 0) == 0 || line[0] == '#') {
         continue;
       }
 
-      const auto word = line.substr(0, divider);
-      const auto pronunciation = line.substr(divider + 2);
-      if (entries_.count(word) > 0) {
-        continue;
-      }
-
+      std::string word;
       std::vector<std::pair<std::string, int>> phones;
-      std::stringstream syllables(pronunciation);
-      std::string item;
-      while (std::getline(syllables, item, ' ')) {
-        if (item == "-" || item.empty()) {
-          continue;
+
+      const auto cache_divider = line.find(':');
+      if (cache_divider != std::string::npos) {
+        word = NormalizeDictionaryKey(line.substr(0, cache_divider));
+        phones = ParseCachedDictionaryPhones(line.substr(cache_divider + 1));
+      } else {
+        const auto divider = line.find("  ");
+        if (divider != std::string::npos) {
+          word = NormalizeDictionaryKey(line.substr(0, divider));
+          phones = ParseDictionaryPhones(line.substr(divider + 2));
+        } else {
+          std::stringstream stream(line);
+          std::string raw_word;
+          if (!(stream >> raw_word)) {
+            continue;
+          }
+          word = NormalizeDictionaryKey(raw_word);
+          std::string remainder;
+          std::getline(stream, remainder);
+          phones = ParseDictionaryPhones(remainder);
         }
-        phones.push_back(RefineArpaPhone(item));
       }
-      if (!phones.empty()) {
-        entries_[word] = std::move(phones);
+
+      if (word.empty() || phones.empty() || entries_.count(word) > 0) {
+        continue;
       }
+
+      entries_[word] = std::move(phones);
     }
   }
 
@@ -814,6 +925,15 @@ std::vector<std::pair<std::string, int>> FallbackPhones(const std::string& word)
 }
 
 std::vector<std::string> SplitAcronymSuffixTokens(const std::string& token) {
+  if (IsUppercaseAlphaWord(token)) {
+    std::vector<std::string> result;
+    result.reserve(token.size());
+    for (char ch : token) {
+      result.emplace_back(1, ch);
+    }
+    return result;
+  }
+
   if (!HasMixedCase(token)) {
     return {token};
   }
@@ -900,7 +1020,8 @@ TextFeatures BuildTextFeatures(const std::string& raw_text,
   phones.push_back(kPadSymbol);
   tones.push_back(0);
 
-  for (const auto& token : basic_tokens) {
+  for (size_t token_index = 0; token_index < basic_tokens.size(); ++token_index) {
+    const auto& token = basic_tokens[token_index];
     const auto expanded_tokens = SplitAcronymSuffixTokens(token);
     for (size_t expanded_index = 0; expanded_index < expanded_tokens.size(); ++expanded_index) {
       const auto& expanded_token = expanded_tokens[expanded_index];
@@ -916,25 +1037,43 @@ TextFeatures BuildTextFeatures(const std::string& raw_text,
         token_phones = special_phones;
       } else if (const auto* g2p_entry = g2p_lexicon.Lookup(expanded_token)) {
         token_phones = *g2p_entry;
-      } else if (IsPunctuationToken(expanded_token)) {
+      } else if (IsLowercaseAlphaWord(expanded_token)) {
+        const auto upper_token = ToUpperAscii(expanded_token);
+        if (const auto* g2p_upper_entry = g2p_lexicon.Lookup(upper_token)) {
+          token_phones = *g2p_upper_entry;
+        }
+      }
+
+      if (token_phones.empty() && IsPunctuationToken(expanded_token)) {
         token_phones.emplace_back(MapPunctuationPhone(expanded_token), 0);
-      } else if (const auto* cmudict_entry = cmudict.Lookup(expanded_token)) {
-        token_phones = *cmudict_entry;
-      } else {
-        token_phones = FallbackPhones(expanded_token);
+      } else if (token_phones.empty()) {
+        if (const auto* cmudict_entry = cmudict.Lookup(expanded_token)) {
+          token_phones = *cmudict_entry;
+        } else {
+          token_phones = FallbackPhones(expanded_token);
+        }
+      }
+
+      const bool is_split_letter = IsSingleLetterToken(expanded_token);
+      const bool previous_is_split_letter = expanded_index > 0
+                                                ? IsSingleLetterToken(expanded_tokens[expanded_index - 1])
+                                                : (token_index > 0 && IsSingleLetterToken(basic_tokens[token_index - 1]));
+      if (is_split_letter && !previous_is_split_letter && (token_index > 0 || expanded_index > 0)) {
+        token_phones.insert(token_phones.begin(), {"SP", 0});
+      }
+
+      const bool next_is_split_letter = expanded_index + 1 < expanded_tokens.size() &&
+                                        IsSingleLetterToken(expanded_tokens[expanded_index + 1]);
+      const bool next_basic_is_split_letter = expanded_index + 1 == expanded_tokens.size() &&
+                                              token_index + 1 < basic_tokens.size() &&
+                                              IsSingleLetterToken(basic_tokens[token_index + 1]);
+      if (is_split_letter && (next_is_split_letter || next_basic_is_split_letter)) {
+        token_phones.emplace_back("SP", 0);
       }
 
       for (const auto& [phone, tone] : token_phones) {
         phones.push_back(phone);
         tones.push_back(tone);
-      }
-
-      const bool is_split_letter = IsSingleLetterToken(expanded_token);
-      const bool next_is_split_letter = expanded_index + 1 < expanded_tokens.size() &&
-                                        IsSingleLetterToken(expanded_tokens[expanded_index + 1]);
-      if (is_split_letter && next_is_split_letter) {
-        phones.push_back("SP");
-        tones.push_back(0);
       }
 
       const auto counts =
@@ -1371,6 +1510,12 @@ ModelConfig TTSEngine::LoadConfig(const std::string& config_path) {
   config.acoustic_model_path = ResolvePath(base_dir, ParseString(values, "acoustic_model_path"));
   config.g2p_lexicon_path = ResolvePath(base_dir, ParseString(values, "g2p_lexicon_path", ""));
   config.cmudict_path = ResolvePath(base_dir, ParseString(values, "cmudict_path", ""));
+  if (config.cmudict_path.empty()) {
+    const auto bundled_cmudict_path = ResolvePath(base_dir, "../lexicons/cmudict_cache_upper.txt");
+    if (std::filesystem::exists(std::filesystem::path(bundled_cmudict_path))) {
+      config.cmudict_path = bundled_cmudict_path;
+    }
+  }
 
   config.bert_input_ids_name = ParseString(values, "bert_input_ids_name", config.bert_input_ids_name);
   config.bert_attention_mask_name = ParseString(values, "bert_attention_mask_name", config.bert_attention_mask_name);
