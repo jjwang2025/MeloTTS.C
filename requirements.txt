@@ -1,0 +1,7 @@
+torch
+transformers
+onnx
+onnxscript
+huggingface_hub
+cached_path
+numba
