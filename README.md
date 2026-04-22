@@ -73,20 +73,13 @@ This target will:
 ### 3. Run the basic demo
 
 ```powershell
-./build/Release/melotts_cli.exe \
-  --config config/english_onnx.example.ini \
-  --text "Hello from MeloTTS C plus plus." \
-  --output outputs/english_cpp_demo.wav
+./build/Release/melotts_cli.exe --config config/english_onnx.example.ini --text "Hello from MeloTTS C plus plus." --output outputs/english_cpp_demo.wav
 ```
 
 ### 4. Run the streaming demo
 
 ```powershell
-./build/Release/melotts_stream_cli.exe \
-  --config config/english_onnx.example.ini \
-  --text "Hello. This is a streaming C plus plus demo. It synthesizes chunk by chunk." \
-  --output outputs/english_cpp_stream.wav \
-  --chunk-dir outputs/stream_chunks
+./build/Release/melotts_stream_cli.exe --config config/english_onnx.example.ini --text "Hello. This is a streaming C plus plus demo. It synthesizes chunk by chunk." --output outputs/english_cpp_stream.wav --chunk-dir outputs/stream_chunks
 ```
 
 ## Models
@@ -119,8 +112,7 @@ If your exported ONNX graph uses different input or output names, update `config
 For domain-specific pronunciations such as acronyms, product names, or programming terms, you can also build a custom lexicon with `g2p-en`:
 
 ```powershell
-python -m pip install -r requirements-g2p.txt
-python tools/build_g2p_lexicon.py --word "C++" --word "ONNX" --word "TTS" --output lexicons/custom.lexicon
+python -m pip install -r requirements-g2p.txt; python tools/build_g2p_lexicon.py --word "C++" --word "ONNX" --word "TTS" --output lexicons/custom.lexicon
 ```
 
 Then point `g2p_lexicon_path` in `config/english_onnx.example.ini` to the generated lexicon file.
@@ -128,8 +120,7 @@ Then point `g2p_lexicon_path` in `config/english_onnx.example.ini` to the genera
 ## Build
 
 ```powershell
-cmake -S . -B build -DONNXRUNTIME_ROOT="path/to/onnxruntime-win-x64-1.20.1"
-cmake --build build --config Release
+cmake -S . -B build -DONNXRUNTIME_ROOT="path/to/onnxruntime-win-x64-1.20.1"; cmake --build build --config Release
 ```
 
 If ONNX Runtime is stored inside the repository, the recommended path is:
@@ -141,8 +132,7 @@ third_party/onnxruntime-win-x64-1.20.1
 So a repository-local build can be done with:
 
 ```powershell
-cmake -S . -B build -DONNXRUNTIME_ROOT="third_party/onnxruntime-win-x64-1.20.1"
-cmake --build build --config Release
+cmake -S . -B build -DONNXRUNTIME_ROOT="third_party/onnxruntime-win-x64-1.20.1"; cmake --build build --config Release
 ```
 
 Windows runtime note:
