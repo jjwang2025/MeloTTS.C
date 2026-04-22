@@ -738,9 +738,17 @@ std::pair<std::string, int> RefineArpaPhone(const std::string& phone) {
   }
   if (std::isdigit(static_cast<unsigned char>(phone.back()))) {
     const int tone = phone.back() - '0' + 1;
-    return {ToLowerAscii(phone.substr(0, phone.size() - 1)), tone};
+    auto symbol = ToLowerAscii(phone.substr(0, phone.size() - 1));
+    if (symbol == "v") {
+      symbol = "V";
+    }
+    return {symbol, tone};
   }
-  return {ToLowerAscii(phone), 0};
+  auto symbol = ToLowerAscii(phone);
+  if (symbol == "v") {
+    symbol = "V";
+  }
+  return {symbol, 0};
 }
 
 std::vector<std::pair<std::string, int>> ParseDictionaryPhones(const std::string& text) {
