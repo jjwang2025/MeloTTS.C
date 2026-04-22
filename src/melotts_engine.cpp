@@ -406,17 +406,46 @@ std::string ExpandNumbersBasic(const std::string& text) {
   return output.str();
 }
 
+std::string SplitCamelAndAcronymBoundaries(const std::string& text) {
+  std::string result;
+  result.reserve(text.size() * 2);
+
+  auto is_upper = [](char ch) {
+    return std::isupper(static_cast<unsigned char>(ch)) != 0;
+  };
+  auto is_lower = [](char ch) {
+    return std::islower(static_cast<unsigned char>(ch)) != 0;
+  };
+  auto is_alpha = [](char ch) {
+    return std::isalpha(static_cast<unsigned char>(ch)) != 0;
+  };
+
+  for (size_t i = 0; i < text.size(); ++i) {
+    const char current = text[i];
+    if (i > 0) {
+      const char previous = text[i - 1];
+      const char next = (i + 1 < text.size()) ? text[i + 1] : '\0';
+
+      const bool lower_to_upper = is_lower(previous) && is_upper(current);
+      const bool acronym_to_word = is_upper(previous) && is_upper(current) && next != '\0' && is_lower(next);
+      const bool digit_to_alpha = std::isdigit(static_cast<unsigned char>(previous)) && is_alpha(current);
+      const bool alpha_to_digit = is_alpha(previous) && std::isdigit(static_cast<unsigned char>(current));
+
+      if ((lower_to_upper || acronym_to_word || digit_to_alpha || alpha_to_digit) &&
+          !std::isspace(static_cast<unsigned char>(previous))) {
+        result.push_back(' ');
+      }
+    }
+
+    result.push_back(current);
+  }
+
+  return result;
+}
+
 std::string NormalizeEnglishText(std::string text) {
+  text = SplitCamelAndAcronymBoundaries(text);
   text = ToLowerAscii(text);
-  ReplaceAll(text, "melotts", "melo tee tee ess");
-  ReplaceAll(text, "tts", "tee tee ess");
-  ReplaceAll(text, "asr", "ay ess ar");
-  ReplaceAll(text, "nlp", "en el pee");
-  ReplaceAll(text, "cli", "see el eye");
-  ReplaceAll(text, "api", "ay pee eye");
-  ReplaceAll(text, "json", "jay son");
-  ReplaceAll(text, "html", "aych tee em el");
-  ReplaceAll(text, "sql", "ess cue el");
   ReplaceAll(text, "c++", "see plus plus");
   ReplaceAll(text, "cpp", "see plus plus");
   ReplaceAll(text, "c#", "see sharp");
@@ -525,51 +554,6 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   }
   if (normalized == "html") {
     return {{"ey", 0}, {"ch", 0}, {"t", 0}, {"iy", 0}, {"eh", 0}, {"m", 0}, {"eh", 0}, {"l", 0}};
-  }
-  if (normalized == "tee") {
-    return {{"t", 0}, {"iy", 0}};
-  }
-  if (normalized == "ess") {
-    return {{"eh", 0}, {"s", 0}};
-  }
-  if (normalized == "see") {
-    return {{"s", 0}, {"iy", 0}};
-  }
-  if (normalized == "ay") {
-    return {{"ay", 0}};
-  }
-  if (normalized == "eff") {
-    return {{"eh", 0}, {"f", 0}};
-  }
-  if (normalized == "ar") {
-    return {{"aa", 0}, {"r", 0}};
-  }
-  if (normalized == "en") {
-    return {{"eh", 0}, {"n", 0}};
-  }
-  if (normalized == "el") {
-    return {{"eh", 0}, {"l", 0}};
-  }
-  if (normalized == "pee") {
-    return {{"p", 0}, {"iy", 0}};
-  }
-  if (normalized == "cue") {
-    return {{"k", 0}, {"y", 0}, {"uw", 0}};
-  }
-  if (normalized == "eye") {
-    return {{"ay", 0}};
-  }
-  if (normalized == "jay") {
-    return {{"jh", 0}, {"ey", 0}};
-  }
-  if (normalized == "son") {
-    return {{"s", 0}, {"ah", 0}, {"n", 0}};
-  }
-  if (normalized == "aych") {
-    return {{"ey", 0}, {"ch", 0}};
-  }
-  if (normalized == "em") {
-    return {{"eh", 0}, {"m", 0}};
   }
   if (normalized == "plus") {
     return {{"p", 0}, {"l", 0}, {"ah", 0}, {"s", 0}};

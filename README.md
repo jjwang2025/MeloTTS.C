@@ -47,6 +47,7 @@ It does not depend on a Python bridge at runtime.
 - Built-in fallback pronunciation rules for unknown words
 - Pure C++ WordPiece tokenizer for BERT input preparation
 - Optional custom G2P lexicon layer for domain-specific terms and acronyms
+- CamelCase names with acronym suffixes are split automatically, for example `MeloTTS` -> `Melo TTS` and `HelloASR` -> `Hello ASR`
 
 The repository provides a practical standalone English C++ pipeline, but its text preprocessing is not intended to be token-for-token identical to the original Python `g2p_en` stack.
 
