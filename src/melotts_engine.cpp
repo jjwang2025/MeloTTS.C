@@ -408,6 +408,7 @@ std::string ExpandNumbersBasic(const std::string& text) {
 
 std::string NormalizeEnglishText(std::string text) {
   text = ToLowerAscii(text);
+  ReplaceAll(text, "melotts", "melo tts");
   ReplaceAll(text, "c++", "c plus plus");
   ReplaceAll(text, "cpp", "c plus plus");
   ReplaceAll(text, "c#", "c sharp");
@@ -516,6 +517,15 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   }
   if (normalized == "html") {
     return {{"ey", 0}, {"ch", 0}, {"t", 0}, {"iy", 0}, {"eh", 0}, {"m", 0}, {"eh", 0}, {"l", 0}};
+  }
+  if (normalized == "plus") {
+    return {{"p", 0}, {"l", 0}, {"ah", 0}, {"s", 0}};
+  }
+  if (normalized == "sharp") {
+    return {{"sh", 0}, {"aa", 0}, {"r", 0}, {"p", 0}};
+  }
+  if (normalized == "melo") {
+    return {{"m", 0}, {"eh", 0}, {"l", 0}, {"ow", 0}};
   }
   return {};
 }

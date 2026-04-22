@@ -117,6 +117,8 @@ python -m pip install -r requirements-g2p.txt; python tools/build_g2p_lexicon.py
 
 Then point `g2p_lexicon_path` in `config/english_onnx.example.ini` to the generated lexicon file.
 
+The repository also ships a default `lexicons/programming_terms.lexicon` covering common technical terms such as `TTS`, `ONNX`, `CMake`, `PyTorch`, `GitHub`, and `WebSocket`.
+
 ## Build
 
 ```powershell
