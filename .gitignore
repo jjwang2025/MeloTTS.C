@@ -5,5 +5,9 @@ models/*.txt
 models/*.json
 models/*.pth
 tools/__pycache__/
+tools/melotts_py/__pycache__/
+tools/melotts_py/monotonic_align/__pycache__/
 *.log
 third_party/*.zip
+third_party/onnxruntime-win-x64-1.20.1/
+lexicons/generated_*.lexicon

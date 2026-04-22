@@ -36,6 +36,8 @@ It does not depend on a Python bridge at runtime.
   Example runtime configuration
 - `tools/export_english_onnx.py`
   Local ONNX export entry point
+- `tools/build_g2p_lexicon.py`
+  Optional `g2p-en`-based lexicon generator for domain terms
 
 ## Scope
 
@@ -44,6 +46,7 @@ It does not depend on a Python bridge at runtime.
 - CMU dictionary pronunciation when available
 - Built-in fallback pronunciation rules for unknown words
 - Pure C++ WordPiece tokenizer for BERT input preparation
+- Optional custom G2P lexicon layer for domain-specific terms and acronyms
 
 The repository provides a practical standalone English C++ pipeline, but its text preprocessing is not intended to be token-for-token identical to the original Python `g2p_en` stack.
 
@@ -112,6 +115,15 @@ python tools/export_english_onnx.py --ckpt-path path/to/checkpoint.pth --config-
 ```
 
 If your exported ONNX graph uses different input or output names, update `config/english_onnx.example.ini`.
+
+For domain-specific pronunciations such as acronyms, product names, or programming terms, you can also build a custom lexicon with `g2p-en`:
+
+```powershell
+python -m pip install -r requirements-g2p.txt
+python tools/build_g2p_lexicon.py --word "C++" --word "ONNX" --word "TTS" --output lexicons/custom.lexicon
+```
+
+Then point `g2p_lexicon_path` in `config/english_onnx.example.ini` to the generated lexicon file.
 
 ## Build
 
@@ -248,6 +260,7 @@ Notes:
 - `phone`, `tone`, and `language` follow the MeloTTS `add_blank` convention
 - Default values are `english_language_id=2` and `english_tone_start=7`
 - The symbol table is embedded directly into the C++ runtime and does not require an external `symbols.py`
+- `g2p_lexicon_path` is checked before CMUdict and fallback rules
 - `cmudict_path` is optional and falls back to built-in pronunciation rules when missing
 - `StreamSynthesize(...)` provides library-level callback-based streaming output
 - Chunk splitting is sentence-first, then word-boundary-first, and only hard-splits when necessary
@@ -260,6 +273,7 @@ Notes:
 - `cmudict_path` is optional
 - Build, output, and cleanup behavior are repository-local
 - `tools/export_english_onnx.py` is included in this repository
+- `tools/build_g2p_lexicon.py` can generate custom pronunciation lexicons from `g2p-en`
 - Minimal Python export dependencies are vendored under `tools/melotts_py/`
 - `requirements.txt` pins `transformers` below `4.53` to keep the current ONNX export path compatible
 - See `THIRD_PARTY.md` for vendored component and dependency notes

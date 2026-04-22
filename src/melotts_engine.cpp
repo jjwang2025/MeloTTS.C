@@ -408,6 +408,10 @@ std::string ExpandNumbersBasic(const std::string& text) {
 
 std::string NormalizeEnglishText(std::string text) {
   text = ToLowerAscii(text);
+  ReplaceAll(text, "c++", "c plus plus");
+  ReplaceAll(text, "cpp", "c plus plus");
+  ReplaceAll(text, "c#", "c sharp");
+  ReplaceAll(text, "f#", "f sharp");
   ReplaceAll(text, "mrs.", "misess");
   ReplaceAll(text, "mr.", "mister");
   ReplaceAll(text, "dr.", "doctor");
@@ -433,6 +437,87 @@ bool IsPunctuationToken(const std::string& token) {
   static const std::unordered_map<std::string, std::string> punctuation = {
       {"!", "!"}, {"?", "?"}, {",", ","}, {".", "."}, {"'", "'"}, {"-", "-"}, {":", ":"}, {";", ";"}};
   return punctuation.count(token) > 0;
+}
+
+std::vector<std::pair<std::string, int>> LookupLetterNamePhones(const std::string& token) {
+  if (token.size() != 1 || !std::isalpha(static_cast<unsigned char>(token.front()))) {
+    return {};
+  }
+
+  switch (static_cast<char>(std::tolower(static_cast<unsigned char>(token.front())))) {
+    case 'a':
+      return {{"ey", 0}};
+    case 'b':
+      return {{"b", 0}, {"iy", 0}};
+    case 'c':
+      return {{"s", 0}, {"iy", 0}};
+    case 'd':
+      return {{"d", 0}, {"iy", 0}};
+    case 'e':
+      return {{"iy", 0}};
+    case 'f':
+      return {{"eh", 0}, {"f", 0}};
+    case 'g':
+      return {{"jh", 0}, {"iy", 0}};
+    case 'h':
+      return {{"ey", 0}, {"ch", 0}};
+    case 'i':
+      return {{"ay", 0}};
+    case 'j':
+      return {{"jh", 0}, {"ey", 0}};
+    case 'k':
+      return {{"k", 0}, {"ey", 0}};
+    case 'l':
+      return {{"eh", 0}, {"l", 0}};
+    case 'm':
+      return {{"eh", 0}, {"m", 0}};
+    case 'n':
+      return {{"eh", 0}, {"n", 0}};
+    case 'o':
+      return {{"ow", 0}};
+    case 'p':
+      return {{"p", 0}, {"iy", 0}};
+    case 'q':
+      return {{"k", 0}, {"y", 0}, {"uw", 0}};
+    case 'r':
+      return {{"aa", 0}, {"r", 0}};
+    case 's':
+      return {{"eh", 0}, {"s", 0}};
+    case 't':
+      return {{"t", 0}, {"iy", 0}};
+    case 'u':
+      return {{"y", 0}, {"uw", 0}};
+    case 'v':
+      return {{"V", 0}, {"iy", 0}};
+    case 'w':
+      return {{"d", 0}, {"ah", 0}, {"b", 0}, {"ah", 0}, {"l", 0}, {"y", 0}, {"uw", 0}};
+    case 'x':
+      return {{"eh", 0}, {"k", 0}, {"s", 0}};
+    case 'y':
+      return {{"w", 0}, {"ay", 0}};
+    case 'z':
+      return {{"z", 0}, {"iy", 0}};
+    default:
+      return {};
+  }
+}
+
+std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::string& token) {
+  if (const auto letter_name = LookupLetterNamePhones(token); !letter_name.empty()) {
+    return letter_name;
+  }
+
+  const auto normalized = ToLowerAscii(token);
+  if (normalized == "api") {
+    return {{"ey", 0}, {"p", 0}, {"iy", 0}, {"ay", 0}};
+  }
+  if (normalized == "sql") {
+    return {{"eh", 0}, {"s", 0}, {"k", 0}, {"y", 0}, {"uw", 0}, {"eh", 0}, {"l", 0}};
+  }
+  if (normalized == "html") {
+    return {{"ey", 0}, {"ch", 0}, {"t", 0}, {"iy", 0}, {"eh", 0}, {"m", 0}, {"eh", 0}, {"l", 0}};
+  }
+  return {};
 }
 
 std::string MapPunctuationPhone(const std::string& token) {
@@ -490,6 +575,62 @@ class CmuDictionary {
       std::string item;
       while (std::getline(syllables, item, ' ')) {
         if (item == "-" || item.empty()) {
+          continue;
+        }
+        phones.push_back(RefineArpaPhone(item));
+      }
+      if (!phones.empty()) {
+        entries_[word] = std::move(phones);
+      }
+    }
+  }
+
+  const std::vector<std::pair<std::string, int>>* Lookup(const std::string& word) const {
+    const auto upper = ToUpperAscii(word);
+    const auto it = entries_.find(upper);
+    return it == entries_.end() ? nullptr : &it->second;
+  }
+
+ private:
+  std::unordered_map<std::string, std::vector<std::pair<std::string, int>>> entries_;
+};
+
+class G2PLexicon {
+ public:
+  explicit G2PLexicon(const std::string& path) {
+    if (path.empty()) {
+      return;
+    }
+    std::ifstream input(path);
+    if (!input) {
+      return;
+    }
+
+    std::string line;
+    while (std::getline(input, line)) {
+      line = Trim(line);
+      if (line.empty() || line[0] == '#') {
+        continue;
+      }
+
+      const auto tab_pos = line.find('\t');
+      const auto split_pos = tab_pos != std::string::npos ? tab_pos : line.find(' ');
+      if (split_pos == std::string::npos) {
+        continue;
+      }
+
+      const auto word = ToUpperAscii(Trim(line.substr(0, split_pos)));
+      std::string phones_part = Trim(line.substr(split_pos + 1));
+      if (word.empty() || phones_part.empty()) {
+        continue;
+      }
+
+      std::vector<std::pair<std::string, int>> phones;
+      std::stringstream stream(phones_part);
+      std::string item;
+      while (std::getline(stream, item, ' ')) {
+        item = Trim(item);
+        if (item.empty()) {
           continue;
         }
         phones.push_back(RefineArpaPhone(item));
@@ -575,6 +716,7 @@ class SymbolTable {
 TextFeatures BuildTextFeatures(const std::string& raw_text,
                                const ModelConfig& config,
                                const SymbolTable& symbols,
+                               const G2PLexicon& g2p_lexicon,
                                const CmuDictionary& cmudict,
                                const WordPieceTokenizer& tokenizer) {
   TextFeatures features;
@@ -598,10 +740,14 @@ TextFeatures BuildTextFeatures(const std::string& raw_text,
     bert_pieces.insert(bert_pieces.end(), pieces.begin(), pieces.end());
 
     std::vector<std::pair<std::string, int>> token_phones;
-    if (IsPunctuationToken(token)) {
+    if (const auto special_phones = LookupSpecialTokenPhones(token); !special_phones.empty()) {
+      token_phones = special_phones;
+    } else if (const auto* g2p_entry = g2p_lexicon.Lookup(token)) {
+      token_phones = *g2p_entry;
+    } else if (IsPunctuationToken(token)) {
       token_phones.emplace_back(MapPunctuationPhone(token), 0);
-    } else if (const auto* entry = cmudict.Lookup(token)) {
-      token_phones = *entry;
+    } else if (const auto* cmudict_entry = cmudict.Lookup(token)) {
+      token_phones = *cmudict_entry;
     } else {
       token_phones = FallbackPhones(token);
     }
@@ -809,6 +955,7 @@ class TTSEngine::Impl {
         env_(ORT_LOGGING_LEVEL_WARNING, "melotts_english_onnx"),
         memory_info_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
         tokenizer_(config_.bert_vocab_path),
+        g2p_lexicon_(config_.g2p_lexicon_path),
         cmudict_(config_.cmudict_path),
         symbols_(),
         bert_session_(nullptr),
@@ -828,7 +975,7 @@ class TTSEngine::Impl {
       throw std::runtime_error("Synthesis text must not be empty.");
     }
 
-    const auto features = BuildTextFeatures(request.text, config_, symbols_, cmudict_, tokenizer_);
+    const auto features = BuildTextFeatures(request.text, config_, symbols_, g2p_lexicon_, cmudict_, tokenizer_);
     const int64_t text_length = static_cast<int64_t>(features.phones.size());
 
     auto bert_hidden = RunBert(features);
@@ -1000,6 +1147,7 @@ class TTSEngine::Impl {
   Ort::SessionOptions session_options_;
   Ort::MemoryInfo memory_info_;
   WordPieceTokenizer tokenizer_;
+  G2PLexicon g2p_lexicon_;
   CmuDictionary cmudict_;
   SymbolTable symbols_;
   Ort::Session bert_session_;
@@ -1039,6 +1187,7 @@ ModelConfig TTSEngine::LoadConfig(const std::string& config_path) {
   config.bert_model_path = ResolvePath(base_dir, ParseString(values, "bert_model_path"));
   config.bert_vocab_path = ResolvePath(base_dir, ParseString(values, "bert_vocab_path"));
   config.acoustic_model_path = ResolvePath(base_dir, ParseString(values, "acoustic_model_path"));
+  config.g2p_lexicon_path = ResolvePath(base_dir, ParseString(values, "g2p_lexicon_path", ""));
   config.cmudict_path = ResolvePath(base_dir, ParseString(values, "cmudict_path", ""));
 
   config.bert_input_ids_name = ParseString(values, "bert_input_ids_name", config.bert_input_ids_name);
