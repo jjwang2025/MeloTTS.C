@@ -6,3 +6,4 @@ models/*.json
 models/*.pth
 tools/__pycache__/
 *.log
+third_party/*.zip
