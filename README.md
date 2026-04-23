@@ -120,6 +120,30 @@ Then point `g2p_lexicon_path` in `config/english_onnx.example.ini` to the genera
 
 The repository also ships a default `lexicons/programming_terms.lexicon` covering common technical terms such as `TTS`, `ONNX`, `CMake`, `PyTorch`, `GitHub`, and `WebSocket`.
 
+## SSML Support
+
+`MeloTTS.C` now supports a small standards-based SSML subset by expanding tags into plain text before synthesis.
+
+Supported tags:
+
+- `<speak>...</speak>`
+- `<p>...</p>`
+- `<break strength="x-weak|weak|medium|strong|x-strong"/>`
+- `<break time="150ms|700ms|1s"/>`
+- `<say-as interpret-as="characters">AI</say-as>`
+
+Notes:
+
+- This is a practical subset, not full SSML coverage.
+- `<say-as interpret-as="characters">` is intended for spelling acronyms or identifiers letter by letter.
+- `<break>` is mapped to punctuation-strength pauses in the current English front-end.
+
+Example:
+
+```powershell
+./build/Release/melotts_cli.exe --config config/english_onnx.example.ini --text "<speak><say-as interpret-as='characters'>AI</say-as><break strength='strong'/>is moving.</speak>" --output outputs/ssml_demo.wav
+```
+
 ## Build
 
 ```powershell

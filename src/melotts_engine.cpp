@@ -126,6 +126,226 @@ void ReplaceAll(std::string& text, const std::string& from, const std::string& t
   }
 }
 
+std::unordered_map<std::string, std::string> ParseTagAttributes(std::string_view text) {
+  std::unordered_map<std::string, std::string> attributes;
+  size_t i = 0;
+  while (i < text.size()) {
+    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
+      ++i;
+    }
+    if (i >= text.size()) {
+      break;
+    }
+
+    const size_t key_begin = i;
+    while (i < text.size() &&
+           (std::isalnum(static_cast<unsigned char>(text[i])) || text[i] == '-' || text[i] == '_')) {
+      ++i;
+    }
+    if (i == key_begin) {
+      break;
+    }
+    const std::string key = ToLowerAscii(std::string(text.substr(key_begin, i - key_begin)));
+
+    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
+      ++i;
+    }
+    if (i >= text.size() || text[i] != '=') {
+      attributes[key] = "";
+      continue;
+    }
+    ++i;
+    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
+      ++i;
+    }
+    if (i >= text.size()) {
+      attributes[key] = "";
+      break;
+    }
+
+    std::string value;
+    if (text[i] == '"' || text[i] == '\'') {
+      const char quote = text[i++];
+      const size_t value_begin = i;
+      while (i < text.size() && text[i] != quote) {
+        ++i;
+      }
+      value = std::string(text.substr(value_begin, i - value_begin));
+      if (i < text.size()) {
+        ++i;
+      }
+    } else {
+      const size_t value_begin = i;
+      while (i < text.size() && !std::isspace(static_cast<unsigned char>(text[i]))) {
+        ++i;
+      }
+      value = std::string(text.substr(value_begin, i - value_begin));
+    }
+    attributes[key] = value;
+  }
+  return attributes;
+}
+
+std::string ExpandCharacterSequence(std::string_view text) {
+  std::string result;
+  bool first = true;
+  for (char ch : text) {
+    if (!std::isalnum(static_cast<unsigned char>(ch))) {
+      continue;
+    }
+    if (!first) {
+      result.push_back(' ');
+    }
+    first = false;
+    result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+  }
+  return result;
+}
+
+std::string BreakStrengthText(const std::string& strength) {
+  const auto lower = ToLowerAscii(strength);
+  if (lower == "none") {
+    return " ";
+  }
+  if (lower == "x-weak" || lower == "weak") {
+    return ", ";
+  }
+  if (lower == "medium") {
+    return ". ";
+  }
+  if (lower == "strong") {
+    return ". . ";
+  }
+  if (lower == "x-strong") {
+    return ". . . ";
+  }
+  return ". ";
+}
+
+std::string BreakTimeText(const std::string& value) {
+  std::string lower = ToLowerAscii(Trim(value));
+  if (lower.empty()) {
+    return ". ";
+  }
+
+  bool is_ms = false;
+  bool is_s = false;
+  if (lower.size() > 2 && lower.substr(lower.size() - 2) == "ms") {
+    is_ms = true;
+    lower.resize(lower.size() - 2);
+  } else if (!lower.empty() && lower.back() == 's') {
+    is_s = true;
+    lower.pop_back();
+  }
+
+  double amount = 0.0;
+  try {
+    amount = std::stod(lower);
+  } catch (...) {
+    return ". ";
+  }
+
+  if (is_s) {
+    amount *= 1000.0;
+  }
+  if (!is_ms && !is_s) {
+    amount = 0.0;
+  }
+
+  if (amount <= 150.0) {
+    return ", ";
+  }
+  if (amount <= 350.0) {
+    return ". ";
+  }
+  if (amount <= 700.0) {
+    return ". . ";
+  }
+  return ". . . ";
+}
+
+std::string ExpandSsmlToText(const std::string& text) {
+  if (text.find('<') == std::string::npos) {
+    return text;
+  }
+
+  std::string result;
+  size_t i = 0;
+  while (i < text.size()) {
+    if (text[i] != '<') {
+      result.push_back(text[i]);
+      ++i;
+      continue;
+    }
+
+    const size_t close = text.find('>', i + 1);
+    if (close == std::string::npos) {
+      result.append(text.substr(i));
+      break;
+    }
+
+    std::string tag_body = Trim(text.substr(i + 1, close - i - 1));
+    const bool closing = !tag_body.empty() && tag_body.front() == '/';
+    const bool self_closing = !tag_body.empty() && tag_body.back() == '/';
+    if (closing) {
+      i = close + 1;
+      continue;
+    }
+    if (self_closing) {
+      tag_body.pop_back();
+      tag_body = Trim(tag_body);
+    }
+
+    size_t name_end = 0;
+    while (name_end < tag_body.size() && !std::isspace(static_cast<unsigned char>(tag_body[name_end]))) {
+      ++name_end;
+    }
+    const std::string tag_name = ToLowerAscii(tag_body.substr(0, name_end));
+    const auto attributes = ParseTagAttributes(std::string_view(tag_body).substr(name_end));
+
+    if (tag_name == "speak" || tag_name == "p") {
+      i = close + 1;
+      continue;
+    }
+
+    if (tag_name == "break") {
+      const auto time_it = attributes.find("time");
+      const auto strength_it = attributes.find("strength");
+      if (time_it != attributes.end() && !time_it->second.empty()) {
+        result.append(BreakTimeText(time_it->second));
+      } else if (strength_it != attributes.end() && !strength_it->second.empty()) {
+        result.append(BreakStrengthText(strength_it->second));
+      } else {
+        result.append(". ");
+      }
+      i = close + 1;
+      continue;
+    }
+
+    if (tag_name == "say-as") {
+      const auto interpret_it = attributes.find("interpret-as");
+      const auto mode = interpret_it == attributes.end() ? "" : ToLowerAscii(interpret_it->second);
+      const size_t end_tag = text.find("</say-as>", close + 1);
+      if (end_tag == std::string::npos) {
+        i = close + 1;
+        continue;
+      }
+      const auto inner = text.substr(close + 1, end_tag - close - 1);
+      if (mode == "characters") {
+        result.append(ExpandCharacterSequence(inner));
+      } else {
+        result.append(inner);
+      }
+      i = end_tag + std::string("</say-as>").size();
+      continue;
+    }
+
+    i = close + 1;
+  }
+
+  return result;
+}
+
 /**
  * @brief Resolves an optionally relative path against a base directory.
  * @param base_dir Base directory used for relative paths.
@@ -1432,7 +1652,8 @@ class TTSEngine::Impl {
       throw std::runtime_error("Synthesis text must not be empty.");
     }
 
-    const auto features = BuildTextFeatures(request.text, config_, symbols_, g2p_lexicon_, cmudict_, tokenizer_);
+    const auto expanded_text = ExpandSsmlToText(request.text);
+    const auto features = BuildTextFeatures(expanded_text, config_, symbols_, g2p_lexicon_, cmudict_, tokenizer_);
     const int64_t text_length = static_cast<int64_t>(features.phones.size());
 
     auto bert_hidden = RunBert(features);
@@ -1505,7 +1726,8 @@ class TTSEngine::Impl {
       throw std::runtime_error("Streaming callback must not be empty.");
     }
 
-    const auto chunks = SplitForStreaming(request.text, options.max_chars);
+    const auto expanded_text = ExpandSsmlToText(request.text);
+    const auto chunks = SplitForStreaming(expanded_text, options.max_chars);
     if (chunks.empty()) {
       throw std::runtime_error("No non-empty text chunks were produced.");
     }
