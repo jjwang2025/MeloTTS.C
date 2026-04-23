@@ -825,9 +825,15 @@ std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
 
     const std::string token = text.substr(i, j - i);
     if (IsUppercaseAlphaWord(token) && token.size() <= 3) {
+      size_t last_non_space = result.find_last_not_of(' ');
+      if (last_non_space != std::string::npos && std::isalpha(static_cast<unsigned char>(result[last_non_space]))) {
+        result.append(". ");
+      }
       for (size_t k = 0; k < token.size(); ++k) {
         if (k > 0) {
-          result.push_back(' ');
+          const bool previous_is_a = std::tolower(static_cast<unsigned char>(token[k - 1])) == 'a';
+          const bool current_is_i = std::tolower(static_cast<unsigned char>(token[k])) == 'i';
+          result.append(previous_is_a && current_is_i ? ". " : " ");
         }
         result.append(SpokenLetterWord(token[k]));
       }
