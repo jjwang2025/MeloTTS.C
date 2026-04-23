@@ -527,6 +527,65 @@ bool IsLowercaseAlphaWord(const std::string& token) {
   return true;
 }
 
+std::string SpokenLetterWord(char ch) {
+  switch (static_cast<char>(std::tolower(static_cast<unsigned char>(ch)))) {
+    case 'a':
+      return "aye";
+    case 'b':
+      return "bee";
+    case 'c':
+      return "see";
+    case 'd':
+      return "dee";
+    case 'e':
+      return "ee";
+    case 'f':
+      return "eff";
+    case 'g':
+      return "gee";
+    case 'h':
+      return "aitch";
+    case 'i':
+      return "eye";
+    case 'j':
+      return "jay";
+    case 'k':
+      return "kay";
+    case 'l':
+      return "ell";
+    case 'm':
+      return "em";
+    case 'n':
+      return "en";
+    case 'o':
+      return "oh";
+    case 'p':
+      return "pee";
+    case 'q':
+      return "cue";
+    case 'r':
+      return "are";
+    case 's':
+      return "ess";
+    case 't':
+      return "tee";
+    case 'u':
+      return "you";
+    case 'v':
+      return "vee";
+    case 'w':
+      return "doubleu";
+    case 'x':
+      return "ex";
+    case 'y':
+      return "why";
+    case 'z':
+      return "zee";
+    default:
+      return std::string(1, ch);
+  }
+}
+
 std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
   std::string result;
   result.reserve(text.size() * 2);
@@ -545,7 +604,18 @@ std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
     }
 
     const std::string token = text.substr(i, j - i);
-    if (IsUppercaseAlphaWord(token)) {
+    if (IsUppercaseAlphaWord(token) && token.size() <= 3) {
+      size_t last_non_space = result.find_last_not_of(' ');
+      if (last_non_space != std::string::npos && std::isalpha(static_cast<unsigned char>(result[last_non_space]))) {
+        result.append(", ");
+      }
+      for (size_t k = 0; k < token.size(); ++k) {
+        if (k > 0) {
+          result.push_back(' ');
+        }
+        result.append(SpokenLetterWord(token[k]));
+      }
+    } else if (IsUppercaseAlphaWord(token)) {
       for (size_t k = 0; k < token.size(); ++k) {
         if (k > 0) {
           result.push_back(' ');
@@ -677,21 +747,45 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   const auto normalized = ToLowerAscii(token);
   static const std::unordered_map<std::string, std::vector<std::pair<std::string, int>>> builtin_words = {
       {"a", {{"ah", 0}}},
+      {"aitch", {{"ey", 0}, {"ch", 0}}},
       {"an", {{"ae", 0}, {"n", 0}}},
       {"are", {{"aa", 0}, {"r", 0}}},
+      {"aye", {{"ey", 0}}},
+      {"bee", {{"b", 0}, {"iy", 0}}},
+      {"cue", {{"k", 0}, {"y", 0}, {"uw", 0}}},
+      {"dee", {{"d", 0}, {"iy", 0}}},
       {"do", {{"d", 0}, {"uw", 0}}},
       {"does", {{"d", 0}, {"ah", 0}, {"z", 0}}},
+      {"doubleu", {{"d", 0}, {"ah", 0}, {"b", 0}, {"ah", 0}, {"l", 0}, {"y", 0}, {"uw", 0}}},
       {"done", {{"d", 0}, {"ah", 0}, {"n", 0}}},
+      {"ee", {{"iy", 0}}},
+      {"eff", {{"eh", 0}, {"f", 0}}},
+      {"ell", {{"eh", 0}, {"l", 0}}},
+      {"em", {{"eh", 0}, {"m", 0}}},
+      {"en", {{"eh", 0}, {"n", 0}}},
+      {"ess", {{"eh", 0}, {"s", 0}}},
+      {"ex", {{"eh", 0}, {"k", 0}, {"s", 0}}},
+      {"eye", {{"ay", 0}}},
+      {"gee", {{"jh", 0}, {"iy", 0}}},
       {"from", {{"f", 0}, {"r", 0}, {"ah", 0}, {"m", 0}}},
+      {"jay", {{"jh", 0}, {"ey", 0}}},
+      {"kay", {{"k", 0}, {"ey", 0}}},
       {"of", {{"ah", 0}, {"v", 0}}},
+      {"oh", {{"ow", 0}}},
       {"one", {{"w", 0}, {"ah", 0}, {"n", 0}}},
       {"once", {{"w", 0}, {"ah", 0}, {"n", 0}, {"s", 0}}},
+      {"pee", {{"p", 0}, {"iy", 0}}},
+      {"see", {{"s", 0}, {"iy", 0}}},
+      {"tee", {{"t", 0}, {"iy", 0}}},
       {"the", {{"dh", 0}, {"ah", 0}}},
       {"to", {{"t", 0}, {"uw", 0}}},
       {"too", {{"t", 0}, {"uw", 0}}},
       {"two", {{"t", 0}, {"uw", 0}}},
+      {"vee", {{"V", 0}, {"iy", 0}}},
       {"was", {{"w", 0}, {"aa", 0}, {"z", 0}}},
+      {"why", {{"w", 0}, {"ay", 0}}},
       {"were", {{"w", 0}, {"er", 0}}},
+      {"zee", {{"z", 0}, {"iy", 0}}},
       {"you", {{"y", 0}, {"uw", 0}}},
       {"your", {{"y", 0}, {"ao", 0}, {"r", 0}}}};
   if (const auto it = builtin_words.find(normalized); it != builtin_words.end()) {
