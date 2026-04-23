@@ -611,6 +611,21 @@ std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
         }
         result.append(SpokenLetterWord(token[k]));
       }
+
+      size_t next = j;
+      while (next < text.size() && std::isspace(static_cast<unsigned char>(text[next]))) {
+        ++next;
+      }
+      if (next < text.size() && std::isalpha(static_cast<unsigned char>(text[next])) &&
+          !IsUppercaseAlphaWord(text.substr(next, [&]() {
+            size_t end = next;
+            while (end < text.size() && std::isalpha(static_cast<unsigned char>(text[end]))) {
+              ++end;
+            }
+            return end - next;
+          }()))) {
+        result.append(".");
+      }
     } else if (IsUppercaseAlphaWord(token)) {
       for (size_t k = 0; k < token.size(); ++k) {
         if (k > 0) {
@@ -628,9 +643,32 @@ std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
   return result;
 }
 
+std::string StrengthenSentenceBoundaries(const std::string& text) {
+  std::string result;
+  result.reserve(text.size() + text.size() / 16);
+
+  for (size_t i = 0; i < text.size(); ++i) {
+    result.push_back(text[i]);
+    if (text[i] != '.') {
+      continue;
+    }
+
+    size_t next = i + 1;
+    while (next < text.size() && std::isspace(static_cast<unsigned char>(text[next]))) {
+      ++next;
+    }
+    if (next < text.size() && std::isupper(static_cast<unsigned char>(text[next]))) {
+      result.append(" . . .");
+    }
+  }
+
+  return result;
+}
+
 std::string NormalizeEnglishText(std::string text) {
   text = SplitCamelAndAcronymBoundaries(text);
   text = ExpandUppercaseAcronymsToLetters(text);
+  text = StrengthenSentenceBoundaries(text);
   text = ToLowerAscii(text);
   ReplaceAll(text, "c++", "see plus plus");
   ReplaceAll(text, "cpp", "see plus plus");
