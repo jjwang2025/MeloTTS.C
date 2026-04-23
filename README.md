@@ -10,8 +10,8 @@ MeloTTS.C is a standalone C++17 English-only text-to-speech runtime built around
 
 It includes:
 
-- 英文 `BERT` ONNX 模型
-- 导出的 `MeloTTS English infer` ONNX 模型
+- English `BERT` ONNX model
+- Exported `MeloTTS English infer` ONNX model
 
 It does not depend on a Python bridge at runtime.
 
@@ -99,7 +99,7 @@ Expected to output a tensor of shape `[1, token_count, 768]`
 Standard BERT vocabulary
 3. `melotts_en_infer.onnx`
 Expected to be equivalent to the English `SynthesizerTrn.infer(...)` graph
-4. 可选的 `cmudict.rep`
+4. Optional `cmudict.rep`
 If provided, CMU dictionary pronunciation is preferred. Otherwise the runtime falls back to built-in English pronunciation rules.
 
 If you already have a local English checkpoint, you can also export with:
