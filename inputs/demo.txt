@@ -1,0 +1,2 @@
+Hello from MeloTTS C plus plus.
+This demo reads synthesis text from a file.

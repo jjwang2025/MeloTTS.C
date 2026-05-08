@@ -29,6 +29,9 @@ namespace {
 /** @brief Hidden size of the exported English BERT output. */
 constexpr int64_t kEnglishBertHidden = 768;
 
+/** @brief Maximum token count supported by the bundled English BERT encoder. */
+constexpr int64_t kMaxBertTokens = 512;
+
 /** @brief Size of the unused auxiliary BERT branch expected by the acoustic model. */
 constexpr int64_t kUnusedBertHidden = 1024;
 
@@ -1659,64 +1662,7 @@ class TTSEngine::Impl {
     }
 
     const auto expanded_text = ExpandSsmlToText(request.text);
-    const auto features = BuildTextFeatures(expanded_text, config_, symbols_, g2p_lexicon_, cmudict_, tokenizer_);
-    const int64_t text_length = static_cast<int64_t>(features.phones.size());
-
-    auto bert_hidden = RunBert(features);
-    std::vector<float> bert_zeros(static_cast<size_t>(kUnusedBertHidden * text_length), 0.0F);
-
-    const int64_t speaker_id = request.speaker_id >= 0 ? request.speaker_id : config_.speaker_id;
-    const float speed = request.speed > 0.0F ? request.speed : config_.speed;
-    const float length_scale = 1.0F / speed;
-    const float sdp_ratio = request.sdp_ratio >= 0.0F ? request.sdp_ratio : config_.sdp_ratio;
-    const float noise_scale = request.noise_scale >= 0.0F ? request.noise_scale : config_.noise_scale;
-    const float noise_scale_w = request.noise_scale_w >= 0.0F ? request.noise_scale_w : config_.noise_scale_w;
-
-    std::vector<int64_t> x_lengths = {text_length};
-    std::vector<int64_t> sid = {speaker_id};
-    std::vector<float> noise_scale_vec = {noise_scale};
-    std::vector<float> length_scale_vec = {length_scale};
-    std::vector<float> noise_scale_w_vec = {noise_scale_w};
-    std::vector<float> sdp_ratio_vec = {sdp_ratio};
-
-    std::vector<std::string> input_names = {
-        config_.acoustic_x_name,
-        config_.acoustic_x_lengths_name,
-        config_.acoustic_sid_name,
-        config_.acoustic_tone_name,
-        config_.acoustic_language_name,
-        config_.acoustic_bert_name,
-        config_.acoustic_ja_bert_name,
-        config_.acoustic_noise_scale_name,
-        config_.acoustic_length_scale_name,
-        config_.acoustic_noise_scale_w_name,
-        config_.acoustic_sdp_ratio_name,
-    };
-
-    std::vector<Ort::Value> input_tensors;
-    input_tensors.reserve(input_names.size());
-    input_tensors.push_back(MakeTensorInt64(features.phones, {1, text_length}, memory_info_));
-    input_tensors.push_back(MakeTensorInt64(x_lengths, {1}, memory_info_));
-    input_tensors.push_back(MakeTensorInt64(sid, {1}, memory_info_));
-    input_tensors.push_back(MakeTensorInt64(features.tones, {1, text_length}, memory_info_));
-    input_tensors.push_back(MakeTensorInt64(features.language, {1, text_length}, memory_info_));
-    input_tensors.push_back(MakeTensorFloat(bert_zeros, {1, kUnusedBertHidden, text_length}, memory_info_));
-    input_tensors.push_back(MakeTensorFloat(bert_hidden, {1, kEnglishBertHidden, text_length}, memory_info_));
-    input_tensors.push_back(MakeTensorFloat(noise_scale_vec, {1}, memory_info_));
-    input_tensors.push_back(MakeTensorFloat(length_scale_vec, {1}, memory_info_));
-    input_tensors.push_back(MakeTensorFloat(noise_scale_w_vec, {1}, memory_info_));
-    input_tensors.push_back(MakeTensorFloat(sdp_ratio_vec, {1}, memory_info_));
-
-    std::vector<std::string> output_names = {config_.acoustic_output_name};
-    const auto input_name_ptrs = ToNamePointers(input_names);
-    const auto output_name_ptrs = ToNamePointers(output_names);
-
-    auto outputs = acoustic_session_.Run(Ort::RunOptions{nullptr}, input_name_ptrs.data(), input_tensors.data(),
-                                        input_tensors.size(), output_name_ptrs.data(), output_name_ptrs.size());
-    if (outputs.empty()) {
-      throw std::runtime_error("Acoustic ONNX session returned no outputs.");
-    }
-    return ExtractAudio1D(outputs.front());
+    return SynthesizeExpandedText(expanded_text, request);
   }
 
   /**
@@ -1778,6 +1724,86 @@ class TTSEngine::Impl {
   int sample_rate() const { return config_.sample_rate; }
 
  private:
+  std::vector<float> SynthesizeExpandedText(const std::string& text, const SynthesisRequest& request) {
+    const auto features = BuildTextFeatures(text, config_, symbols_, g2p_lexicon_, cmudict_, tokenizer_);
+    if (features.bert_input_ids.size() > static_cast<std::size_t>(kMaxBertTokens)) {
+      // Keep recursive splits aligned with natural boundaries before running BERT.
+      const auto chunks = SplitForStreaming(text, std::max<std::size_t>(1, text.size() / 2));
+      if (chunks.size() <= 1) {
+        throw std::runtime_error("Input text is too long for the 512-token BERT encoder and could not be split automatically.");
+      }
+
+      std::vector<float> combined_audio;
+      for (const auto& chunk_text : chunks) {
+        auto chunk_audio = SynthesizeExpandedText(chunk_text, request);
+        combined_audio.insert(combined_audio.end(), chunk_audio.begin(), chunk_audio.end());
+      }
+      return combined_audio;
+    }
+
+    return SynthesizeFromFeatures(features, request);
+  }
+
+  std::vector<float> SynthesizeFromFeatures(const TextFeatures& features, const SynthesisRequest& request) {
+    const int64_t text_length = static_cast<int64_t>(features.phones.size());
+
+    auto bert_hidden = RunBert(features);
+    std::vector<float> bert_zeros(static_cast<size_t>(kUnusedBertHidden * text_length), 0.0F);
+
+    const int64_t speaker_id = request.speaker_id >= 0 ? request.speaker_id : config_.speaker_id;
+    const float speed = request.speed > 0.0F ? request.speed : config_.speed;
+    const float length_scale = 1.0F / speed;
+    const float sdp_ratio = request.sdp_ratio >= 0.0F ? request.sdp_ratio : config_.sdp_ratio;
+    const float noise_scale = request.noise_scale >= 0.0F ? request.noise_scale : config_.noise_scale;
+    const float noise_scale_w = request.noise_scale_w >= 0.0F ? request.noise_scale_w : config_.noise_scale_w;
+
+    std::vector<int64_t> x_lengths = {text_length};
+    std::vector<int64_t> sid = {speaker_id};
+    std::vector<float> noise_scale_vec = {noise_scale};
+    std::vector<float> length_scale_vec = {length_scale};
+    std::vector<float> noise_scale_w_vec = {noise_scale_w};
+    std::vector<float> sdp_ratio_vec = {sdp_ratio};
+
+    std::vector<std::string> input_names = {
+        config_.acoustic_x_name,
+        config_.acoustic_x_lengths_name,
+        config_.acoustic_sid_name,
+        config_.acoustic_tone_name,
+        config_.acoustic_language_name,
+        config_.acoustic_bert_name,
+        config_.acoustic_ja_bert_name,
+        config_.acoustic_noise_scale_name,
+        config_.acoustic_length_scale_name,
+        config_.acoustic_noise_scale_w_name,
+        config_.acoustic_sdp_ratio_name,
+    };
+
+    std::vector<Ort::Value> input_tensors;
+    input_tensors.reserve(input_names.size());
+    input_tensors.push_back(MakeTensorInt64(features.phones, {1, text_length}, memory_info_));
+    input_tensors.push_back(MakeTensorInt64(x_lengths, {1}, memory_info_));
+    input_tensors.push_back(MakeTensorInt64(sid, {1}, memory_info_));
+    input_tensors.push_back(MakeTensorInt64(features.tones, {1, text_length}, memory_info_));
+    input_tensors.push_back(MakeTensorInt64(features.language, {1, text_length}, memory_info_));
+    input_tensors.push_back(MakeTensorFloat(bert_zeros, {1, kUnusedBertHidden, text_length}, memory_info_));
+    input_tensors.push_back(MakeTensorFloat(bert_hidden, {1, kEnglishBertHidden, text_length}, memory_info_));
+    input_tensors.push_back(MakeTensorFloat(noise_scale_vec, {1}, memory_info_));
+    input_tensors.push_back(MakeTensorFloat(length_scale_vec, {1}, memory_info_));
+    input_tensors.push_back(MakeTensorFloat(noise_scale_w_vec, {1}, memory_info_));
+    input_tensors.push_back(MakeTensorFloat(sdp_ratio_vec, {1}, memory_info_));
+
+    std::vector<std::string> output_names = {config_.acoustic_output_name};
+    const auto input_name_ptrs = ToNamePointers(input_names);
+    const auto output_name_ptrs = ToNamePointers(output_names);
+
+    auto outputs = acoustic_session_.Run(Ort::RunOptions{nullptr}, input_name_ptrs.data(), input_tensors.data(),
+                                        input_tensors.size(), output_name_ptrs.data(), output_name_ptrs.size());
+    if (outputs.empty()) {
+      throw std::runtime_error("Acoustic ONNX session returned no outputs.");
+    }
+    return ExtractAudio1D(outputs.front());
+  }
+
   /**
    * @brief Converts a UTF-8-ish narrow path to a wide path for the Windows ORT API.
    * @param value Narrow string path.

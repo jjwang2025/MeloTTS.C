@@ -77,11 +77,45 @@ This target will:
 ./build/Release/melotts_cli.exe --config config/english_onnx.example.ini --text "Hello from MeloTTS C plus plus." --output outputs/english_cpp_demo.wav
 ```
 
+Or synthesize from a text file:
+
+```powershell
+./build/Release/melotts_cli.exe --config config/english_onnx.example.ini --text-file inputs/demo.txt --output outputs/english_cpp_demo.wav
+```
+
 ### 4. Run the streaming demo
 
 ```powershell
 ./build/Release/melotts_stream_cli.exe --config config/english_onnx.example.ini --text "Hello. This is a streaming C plus plus demo. It synthesizes chunk by chunk." --output outputs/english_cpp_stream.wav --chunk-dir outputs/stream_chunks
 ```
+
+The streaming demo also accepts `--text-file <path>` instead of `--text <text>`.
+
+The repository uses `inputs/` for sample text files. A ready-to-run example is included at `inputs/demo.txt`.
+
+For long articles or multi-paragraph text files, the basic CLI now auto-splits the input before BERT inference when the text would exceed the encoder's 512-token limit. For better chunk visibility and per-chunk metrics, prefer `melotts_stream_cli`.
+
+## CLI Arguments
+
+- `--config <ini>`
+  Runtime configuration file.
+- `--text <text>`
+  Inline text to synthesize.
+- `--text-file <path>`
+  Read the synthesis text from a file. This cannot be used together with `--text`.
+- `--output <wav>`
+  Output WAV file path.
+- `--speaker <id>`
+  Optional speaker id.
+- `--speed <value>`
+  Optional playback speed multiplier.
+
+Streaming-only options:
+
+- `--max-chars <n>`
+  Maximum characters per chunk.
+- `--chunk-dir <dir>`
+  Optional directory for per-chunk WAV outputs.
 
 ## Models
 

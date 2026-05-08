@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -120,8 +121,25 @@ class WaveStreamWriter {
  */
 void PrintUsage() {
   std::cout << "Usage:\n"
-            << "  melotts_tts_stream_cli --config <ini> --text <text> --output <wav>"
+            << "  melotts_tts_stream_cli --config <ini> (--text <text> | --text-file <path>) --output <wav>"
             << " [--speaker <id>] [--speed <value>] [--max-chars <n>] [--chunk-dir <dir>]\n";
+}
+
+/**
+ * @brief Loads the synthesis text from a UTF-8 text file.
+ * @param file_path Input text file path.
+ * @return Full file contents.
+ * @throws std::runtime_error Thrown when the file cannot be opened.
+ */
+std::string ReadTextFile(const std::string& file_path) {
+  std::ifstream input(file_path, std::ios::binary);
+  if (!input) {
+    throw std::runtime_error("Failed to open text file: " + file_path);
+  }
+
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
 }
 
 /**
@@ -158,6 +176,7 @@ int main(int argc, char** argv) {
   try {
     std::string config_path;
     std::string text;
+    std::string text_file_path;
     std::string output_path;
     std::string chunk_dir;
     std::size_t max_chars = 120;
@@ -169,6 +188,8 @@ int main(int argc, char** argv) {
         config_path = RequireValue(i, argc, argv);
       } else if (arg == "--text") {
         text = RequireValue(i, argc, argv);
+      } else if (arg == "--text-file") {
+        text_file_path = RequireValue(i, argc, argv);
       } else if (arg == "--output") {
         output_path = RequireValue(i, argc, argv);
       } else if (arg == "--speaker") {
@@ -185,6 +206,13 @@ int main(int argc, char** argv) {
       } else {
         throw std::runtime_error("Unknown argument: " + arg);
       }
+    }
+
+    if (!text.empty() && !text_file_path.empty()) {
+      throw std::runtime_error("Use either --text or --text-file, not both");
+    }
+    if (!text_file_path.empty()) {
+      text = ReadTextFile(text_file_path);
     }
 
     if (config_path.empty() || text.empty() || output_path.empty()) {
