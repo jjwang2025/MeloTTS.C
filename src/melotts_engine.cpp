@@ -583,6 +583,12 @@ std::string ExpandNumbersBasic(const std::string& text) {
       "eighteen", "nineteen"};
   static const std::vector<std::string> tens = {
       "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+  static const std::vector<std::string> ordinal_units = {
+      "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth",
+      "tenth",  "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+      "eighteenth", "nineteenth"};
+  static const std::vector<std::string> ordinal_tens = {
+      "", "", "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth", "seventieth", "eightieth", "ninetieth"};
 
   std::function<std::string(int)> number_to_words = [&](int value) -> std::string {
     if (value < 20) {
@@ -609,16 +615,85 @@ std::string ExpandNumbersBasic(const std::string& text) {
     return std::to_string(value);
   };
 
+  std::function<std::string(int)> ordinal_to_words = [&](int value) -> std::string {
+    if (value < 20) {
+      return ordinal_units[static_cast<size_t>(value)];
+    }
+    if (value < 100) {
+      const int ten = value / 10;
+      const int rest = value % 10;
+      return rest == 0 ? ordinal_tens[static_cast<size_t>(ten)]
+                       : tens[static_cast<size_t>(ten)] + " " + ordinal_units[static_cast<size_t>(rest)];
+    }
+    if (value < 1000) {
+      const int hundred = value / 100;
+      const int rest = value % 100;
+      return rest == 0 ? units[static_cast<size_t>(hundred)] + " hundredth"
+                       : units[static_cast<size_t>(hundred)] + " hundred " + ordinal_to_words(rest);
+    }
+    if (value < 10000) {
+      const int thousand = value / 1000;
+      const int rest = value % 1000;
+      return rest == 0 ? units[static_cast<size_t>(thousand)] + " thousandth"
+                       : units[static_cast<size_t>(thousand)] + " thousand " + ordinal_to_words(rest);
+    }
+    return number_to_words(value) + "th";
+  };
+
+  auto is_ordinal_suffix = [&](size_t index) {
+    if (index + 1 >= text.size()) {
+      return false;
+    }
+    const char first = static_cast<char>(std::tolower(static_cast<unsigned char>(text[index])));
+    const char second = static_cast<char>(std::tolower(static_cast<unsigned char>(text[index + 1])));
+    return (first == 's' && second == 't') || (first == 'n' && second == 'd') ||
+           (first == 'r' && second == 'd') || (first == 't' && second == 'h');
+  };
+
+  auto previous_alpha_word = [&](size_t index) {
+    if (index == 0) {
+      return std::string{};
+    }
+
+    size_t end = index;
+    while (end > 0 && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+      --end;
+    }
+    size_t begin = end;
+    while (begin > 0 && std::isalpha(static_cast<unsigned char>(text[begin - 1]))) {
+      --begin;
+    }
+    return ToLowerAscii(text.substr(begin, end - begin));
+  };
+
+  auto is_month_name = [](const std::string& word) {
+    static const std::set<std::string> months = {
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"};
+    return months.count(word) > 0;
+  };
+
   std::ostringstream output;
   std::string digits;
+  size_t digit_begin = 0;
   for (size_t i = 0; i < text.size(); ++i) {
     const char ch = text[i];
     if (std::isdigit(static_cast<unsigned char>(ch))) {
+      if (digits.empty()) {
+        digit_begin = i;
+      }
       digits.push_back(ch);
       continue;
     }
     if (!digits.empty()) {
-      output << number_to_words(std::stoi(digits));
+      if (is_ordinal_suffix(i) || is_month_name(previous_alpha_word(digit_begin))) {
+        output << ordinal_to_words(std::stoi(digits));
+        if (is_ordinal_suffix(i)) {
+          ++i;
+        }
+      } else {
+        output << number_to_words(std::stoi(digits));
+      }
       digits.clear();
     }
     output << ch;
@@ -855,13 +930,6 @@ std::string ExpandUppercaseAcronymsToLetters(const std::string& text) {
           }()))) {
         result.append(".");
       }
-    } else if (IsUppercaseAlphaWord(token)) {
-      for (size_t k = 0; k < token.size(); ++k) {
-        if (k > 0) {
-          result.push_back(' ');
-        }
-        result.push_back(token[k]);
-      }
     } else {
       result.append(token);
     }
@@ -898,6 +966,7 @@ std::string NormalizeEnglishText(std::string text) {
   text = SplitCamelAndAcronymBoundaries(text);
   text = ExpandUppercaseAcronymsToLetters(text);
   text = StrengthenSentenceBoundaries(text);
+  ReplaceAll(text, "--", ". ");
   text = ToLowerAscii(text);
   ReplaceAll(text, "c++", "see plus plus");
   ReplaceAll(text, "cpp", "see plus plus");
@@ -926,7 +995,8 @@ std::string NormalizeEnglishText(std::string text) {
 
 bool IsPunctuationToken(const std::string& token) {
   static const std::unordered_map<std::string, std::string> punctuation = {
-      {"!", "!"}, {"?", "?"}, {",", ","}, {".", "."}, {"'", "'"}, {"-", "-"}, {":", ":"}, {";", ";"}};
+      {"!", "!"}, {"?", "?"}, {",", ","}, {".", "."}, {"'", "'"}, {"-", "-"},
+      {":", ":"}, {";", ";"}, {"(", "("}, {")", ")"}};
   return punctuation.count(token) > 0;
 }
 
@@ -1076,11 +1146,17 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   if (normalized == "melo") {
     return {{"m", 0}, {"eh", 0}, {"l", 0}, {"ow", 0}};
   }
+  if (normalized == "xinhua") {
+    return {{"sh", 0}, {"ih", 0}, {"n", 0}, {"w", 0}, {"aa", 0}};
+  }
   return {};
 }
 
 std::string MapPunctuationPhone(const std::string& token) {
   if (token == ":" || token == ";") {
+    return ",";
+  }
+  if (token == "(" || token == ")" || token == "-") {
     return ",";
   }
   if (token == "...") {
