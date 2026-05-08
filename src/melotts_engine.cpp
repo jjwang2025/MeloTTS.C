@@ -343,6 +343,22 @@ std::string ExpandSsmlToText(const std::string& text) {
       continue;
     }
 
+    if (tag_name == "sub") {
+      const size_t end_tag = text.find("</sub>", close + 1);
+      if (end_tag == std::string::npos) {
+        i = close + 1;
+        continue;
+      }
+      const auto alias_it = attributes.find("alias");
+      if (alias_it != attributes.end() && !alias_it->second.empty()) {
+        result.append(alias_it->second);
+      } else {
+        result.append(text.substr(close + 1, end_tag - close - 1));
+      }
+      i = end_tag + std::string("</sub>").size();
+      continue;
+    }
+
     i = close + 1;
   }
 
@@ -962,7 +978,52 @@ std::string StrengthenSentenceBoundaries(const std::string& text) {
   return result;
 }
 
+std::string NormalizePausePunctuation(const std::string& text) {
+  std::string result;
+  result.reserve(text.size() * 2);
+
+  auto is_word_char = [](char ch) {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    return std::isalnum(uch) != 0;
+  };
+
+  for (size_t i = 0; i < text.size(); ++i) {
+    const char ch = text[i];
+    const char previous = i > 0 ? text[i - 1] : '\0';
+    const char next = i + 1 < text.size() ? text[i + 1] : '\0';
+
+    if (ch == '"') {
+      result.append(", ");
+      continue;
+    }
+
+    if (ch == '\'') {
+      if (is_word_char(previous) && is_word_char(next)) {
+        result.push_back(ch);
+      } else {
+        result.append(", ");
+      }
+      continue;
+    }
+
+    if (ch == '\r') {
+      continue;
+    }
+
+    if (ch == '\n') {
+      const bool paragraph_break = next == '\n';
+      result.append(paragraph_break ? " . . " : ", ");
+      continue;
+    }
+
+    result.push_back(ch);
+  }
+
+  return result;
+}
+
 std::string NormalizeEnglishText(std::string text) {
+  text = NormalizePausePunctuation(text);
   text = SplitCamelAndAcronymBoundaries(text);
   text = ExpandUppercaseAcronymsToLetters(text);
   text = StrengthenSentenceBoundaries(text);
@@ -995,7 +1056,7 @@ std::string NormalizeEnglishText(std::string text) {
 
 bool IsPunctuationToken(const std::string& token) {
   static const std::unordered_map<std::string, std::string> punctuation = {
-      {"!", "!"}, {"?", "?"}, {",", ","}, {".", "."}, {"'", "'"}, {"-", "-"},
+      {"!", "!"}, {"?", "?"}, {",", ","}, {".", "."}, {"'", "'"}, {"\"", "\""}, {"-", "-"},
       {":", ":"}, {";", ";"}, {"(", "("}, {")", ")"}};
   return punctuation.count(token) > 0;
 }
@@ -1143,6 +1204,9 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
   if (normalized == "sharp") {
     return {{"sh", 0}, {"aa", 0}, {"r", 0}, {"p", 0}};
   }
+  if (normalized == "fourth") {
+    return {{"f", 0}, {"ao", 0}, {"r", 0}, {"th", 0}};
+  }
   if (normalized == "melo") {
     return {{"m", 0}, {"eh", 0}, {"l", 0}, {"ow", 0}};
   }
@@ -1153,6 +1217,9 @@ std::vector<std::pair<std::string, int>> LookupSpecialTokenPhones(const std::str
 }
 
 std::string MapPunctuationPhone(const std::string& token) {
+  if (token == "'" || token == "\"") {
+    return ",";
+  }
   if (token == ":" || token == ";") {
     return ",";
   }

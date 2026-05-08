@@ -95,6 +95,12 @@ The repository uses `inputs/` for sample text files. A ready-to-run example is i
 
 For long articles or multi-paragraph text files, the basic CLI now auto-splits the input before BERT inference when the text would exceed the encoder's 512-token limit. For better chunk visibility and per-chunk metrics, prefer `melotts_stream_cli`.
 
+The CLI also accepts a small SSML subset. You can force a custom spoken form for hard-to-pronounce text with `<sub alias="...">...</sub>`, for example:
+
+```powershell
+./build/Release/melotts_cli.exe --config config/english_onnx.example.ini --text "The <sub alias=\"for-tee-ith\">40th</sub> Tunis International Book Fair concluded Sunday in Tunis." --output outputs/english_cpp_demo.wav
+```
+
 ## CLI Arguments
 
 - `--config <ini>`
@@ -103,6 +109,7 @@ For long articles or multi-paragraph text files, the basic CLI now auto-splits t
   Inline text to synthesize.
 - `--text-file <path>`
   Read the synthesis text from a file. This cannot be used together with `--text`.
+  A small SSML subset is supported inside the text, including `<break>`, `<say-as>`, and `<sub alias="...">`.
 - `--output <wav>`
   Output WAV file path.
 - `--speaker <id>`
